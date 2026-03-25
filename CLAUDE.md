@@ -183,6 +183,37 @@ type SoundEffect = {
 | `transcript_fixed.json` | transcript_corrected.json |
 | `transcript_audio.wav` | /tmp/supermovie_audio.wav |
 
+## アップデート手順
+
+「アップデートして」と言われたら以下を実行:
+
+```bash
+# 1. リモートの変更を取得
+cd ~/.claude/plugins/supermovie && git fetch origin
+
+# 2. 差分を確認
+git log HEAD..origin/main --oneline
+
+# 3. 変更がある場合のみpull
+git pull origin main
+```
+
+**変更があった場合、ユーザーに報告:**
+```
+📦 SuperMovie アップデート完了
+
+更新内容:
+- <コミットメッセージ1>
+- <コミットメッセージ2>
+
+⚠️ 新しいスキルが追加された場合はセッション再起動が必要です。
+```
+
+**変更がない場合:**
+```
+✅ SuperMovie は最新版です（現在: <最新コミットハッシュ短縮>）
+```
+
 ## スキル間の依存関係
 
 - `supermovie-init` がヒアリングで `format` を決定 → 全スキルに影響
