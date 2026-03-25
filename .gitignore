@@ -7,3 +7,9 @@ dist/
 *.wav
 *.mp3
 *.m4a
+.env
+.env.*
+*.key
+credentials.*
+transcript_audio.wav
+.venv/
