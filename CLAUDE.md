@@ -17,12 +17,55 @@
 npm run dev                   ← Remotion Studioプレビュー
 ```
 
+## 動画フォーマット定義
+
+| フォーマット | アスペクト比 | 解像度 | 用途 |
+|-------------|------------|--------|------|
+| `youtube` | 16:9 | 1920×1080 | YouTube通常動画（デフォルト） |
+| `short` | 9:16 | 1080×1920 | YouTube Shorts / TikTok / Reels |
+| `square` | 1:1 | 1080×1080 | Instagram / SNS投稿 |
+
+**フォーマットはプロジェクト作成時にヒアリングで決定し、以下に影響する:**
+- Root.tsx の `width` / `height`
+- テロップの `fontSize`・`position.bottom`（縦動画は調整が必要）
+- 挿入画像のサイズ・配置
+- 画像生成時のアスペクト比（Gemini API）
+
+### フォーマット別テロップ調整
+
+| 設定 | youtube (16:9) | short (9:16) | square (1:1) |
+|------|---------------|--------------|-------------|
+| fontSize | 80 | 60 | 70 |
+| position.bottom | 100 | 150 | 120 |
+| maxWidth | 85% | 90% | 90% |
+| Title fontSize | 42 | 32 | 36 |
+
+## 画像生成（Gemini API）
+
+挿入画像・インフォグラフィックの生成に使用。
+
+```bash
+# 基本
+python scripts/run.py api_generator.py --prompt "説明図" -a 16:9
+
+# アスペクト比は動画フォーマットに連動
+# youtube → -a 16:9
+# short   → -a 9:16
+# square  → -a 1:1
+```
+
+- スクリプト: `.claude/skills/gemini-api-image/scripts/run.py`
+- 環境変数: `GEMINI_API_KEY`
+- 生成先: `<PROJECT>/public/images/`
+
 ## データスキーマ（全スキル共通の信頼できる唯一の定義）
 
 ### project-config.json
 
 ```json
 {
+  "format": "youtube",
+  "resolution": { "width": 1920, "height": 1080 },
   "videoType": "YouTube解説",
   "targetAudience": "ビジネスパーソン",
   "tone": "プロフェッショナル",
@@ -125,6 +168,8 @@ type SoundEffect = {
 | BGM素材 | `<PROJECT>/public/BGM/` |
 | 挿入画像 | `<PROJECT>/public/images/` |
 | Python仮想環境 | `<PROJECT>/.venv/` |
+| 生成画像 | `<PROJECT>/public/images/generated/` |
+| Gemini APIスクリプト | `~/.claude/skills/gemini-api-image/scripts/run.py` |
 
 ## 用語統一ルール
 
@@ -138,7 +183,9 @@ type SoundEffect = {
 
 ## スキル間の依存関係
 
+- `supermovie-init` がヒアリングで `format` を決定 → 全スキルに影響
 - `supermovie-subtitles` は `transcript_fixed.json` を読む。独自の文字起こしは行わない
 - `supermovie-se` は `src/テロップテンプレート/telopData.ts` を読む
-- 全スキルは `project-config.json` を参照できる
+- 全スキルは `project-config.json` の `format` / `resolution` を参照してサイズ調整する
 - AssemblyAI は `supermovie-transcribe` の話者分離時のみ使用
+- 画像生成は `gemini-api-image` スキルを使用。アスペクト比は `format` に連動
