@@ -180,7 +180,7 @@ cd "<PROJECT_DIR>" && npx remotion studio
 🎨 スタイル: <ヒアリング結果サマリー>
 
 次のステップ:
-→ /supermovie-subtitles でテロップ自動生成
+→ /supermovie-transcribe で文字起こし
 ```
 
 ---

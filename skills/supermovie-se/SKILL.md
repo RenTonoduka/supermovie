@@ -187,3 +187,21 @@ export const seData: SoundEffect[] = [
 | telopData が空 | `/supermovie-subtitles` の実行を促す |
 | SE素材が不足 | 共通素材のコピーを提案 |
 | project-config.json なし | デフォルト（カジュアル密度40%）で続行 |
+
+---
+
+## 連携マップ
+
+```
+/supermovie-init              ← ヒアリング → プロジェクト作成
+    ↓
+/supermovie-transcribe        ← 文字起こし（ローカル無料）
+    ↓ transcript.json
+/supermovie-transcript-fix    ← 誤字修正（辞書 + Claude LLM）
+    ↓ transcript_fixed.json
+/supermovie-subtitles         ← テロップ＆タイトル生成
+    ↓ telopData.ts + titleData.ts
+/supermovie-se                ← ★ここ: SE自動配置
+    ↓ seData.ts
+npm run dev                   ← プレビュー
+```

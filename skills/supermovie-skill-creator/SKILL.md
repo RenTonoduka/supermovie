@@ -162,15 +162,19 @@ mkdir -p .claude/skills/supermovie-<name>
 ## 既存スキルとの連携マップ
 
 ```
-/supermovie-init          ← プロジェクト作成（起点）
+/supermovie-init              ← プロジェクト作成（起点）
     ↓
-/supermovie-subtitles     ← テロップ＆タイトル生成
+/supermovie-transcribe        ← 文字起こし（ローカル無料）
     ↓
-/supermovie-se            ← SE自動配置
+/supermovie-transcript-fix    ← 誤字修正（辞書 + Claude LLM）
+    ↓
+/supermovie-subtitles         ← テロップ＆タイトル生成
+    ↓
+/supermovie-se                ← SE自動配置
     ↓
 （新スキルはここに挿入）
     ↓
-npm run dev               ← プレビュー
+npm run dev                   ← プレビュー
 ```
 
 新スキルを追加する際は、このフローのどこに位置するかを明確にすること。
