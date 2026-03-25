@@ -9,5 +9,6 @@
   "repository": "https://github.com/RenTonoduka/supermovie",
   "license": "MIT",
   "keywords": ["remotion", "video-editing", "telop", "subtitle", "sound-effects", "claude-code", "automation"],
-  "skills": ["./skills/"]
+  "skills": ["./skills/"],
+  "agents": ["./agents/"]
 }
