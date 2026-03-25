@@ -6,6 +6,7 @@ import {
   useVideoConfig,
 } from 'remotion';
 import type { TelopSegment } from './telopTypes';
+import { TELOP_CONFIG } from '../videoConfig';
 import {
   template1_gradient,
   template2_purpleStroke,
@@ -199,9 +200,19 @@ export const Telop: React.FC<TelopProps> = ({ segment }) => {
   const frame = useCurrentFrame();
   const { fps, width } = useVideoConfig();
 
-  // テンプレートを取得
-  const config = getTemplateConfig(segment);
+  // テンプレートを取得し、フォーマット別設定で上書き
+  const baseConfig = getTemplateConfig(segment);
   const animation = getAnimationConfig(segment);
+  const config = {
+    ...baseConfig,
+    font: { ...baseConfig.font, size: TELOP_CONFIG.fontSize },
+    position: {
+      ...baseConfig.position,
+      bottom: TELOP_CONFIG.bottomOffset,
+      maxWidth: TELOP_CONFIG.maxWidth,
+      containerPadding: TELOP_CONFIG.containerPadding,
+    },
+  };
   const { font, background, position, textStroke, textShadow } = config;
 
   const localFrame = frame - segment.startFrame;

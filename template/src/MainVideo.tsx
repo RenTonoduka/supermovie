@@ -4,14 +4,14 @@ import { SESequence } from './SoundEffects/SESequence';
 import { BGM } from './SoundEffects/BGM';
 import { ImageSequence } from './InsertImage';
 import { TitleSequence } from './Title';
-import { VIDEO_CONFIG } from './Root';
+import { VIDEO_FILE } from './videoConfig';
 
 export const MainVideo: React.FC = () => {
   return (
     <AbsoluteFill style={{ backgroundColor: 'black' }}>
       {/* ベース動画 */}
       <Video
-        src={staticFile(VIDEO_CONFIG.videoFile)}
+        src={staticFile(VIDEO_FILE)}
         volume={1.0}
         style={{
           width: '100%',
@@ -26,7 +26,7 @@ export const MainVideo: React.FC = () => {
       {/* テロップ */}
       <TelopPlayer />
 
-      {/* 左上タイトル */}
+      {/* タイトル */}
       <TitleSequence />
 
       {/* BGM */}

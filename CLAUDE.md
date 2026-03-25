@@ -195,6 +195,7 @@ type SoundEffect = {
 | テロップ型定義 | `<PROJECT>/src/テロップテンプレート/telopTypes.ts` |
 | タイトルデータ | `<PROJECT>/src/Title/titleData.ts` |
 | SEデータ | `<PROJECT>/src/SoundEffects/seData.ts` |
+| 動画設定（SSoT） | `<PROJECT>/src/videoConfig.ts` |
 | ベース動画 | `<PROJECT>/public/main.mp4` |
 | SE素材 | `<PROJECT>/public/se/` |
 | BGM素材 | `<PROJECT>/public/BGM/` |
@@ -247,7 +248,8 @@ git pull origin main
 
 ## スキル間の依存関係
 
-- `supermovie-init` がヒアリングで `format` を決定 → 全スキルに影響
+- `supermovie-init` がヒアリングで `format` を決定 → `videoConfig.ts` を書き換え → 全コンポーネントに反映
+- `videoConfig.ts` がFPS, 解像度, テロップサイズのSingle Source of Truth。各.tsxは直接値を持たない
 - `supermovie-subtitles` は `transcript_fixed.json` を読む。独自の文字起こしは行わない
 - `supermovie-se` は `src/テロップテンプレート/telopData.ts` を読む
 - 全スキルは `project-config.json` の `format` / `resolution` を参照してサイズ調整する

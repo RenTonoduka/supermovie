@@ -1,10 +1,11 @@
 import type { TelopSegment } from './telopTypes';
+import { FPS as CONFIG_FPS, DURATION_FRAMES } from '../videoConfig';
 
-// ===== 字幕データ（テンプレート） =====
+// ===== テロップデータ =====
 // /supermovie-subtitles で自動生成されます
 
-export const FPS = 30;
-export const TOTAL_FRAMES = 0; // 動画の総フレーム数
+export const FPS = CONFIG_FPS;
+export const TOTAL_FRAMES = DURATION_FRAMES;
 
 export const telopData: TelopSegment[] = [
   // サンプル:

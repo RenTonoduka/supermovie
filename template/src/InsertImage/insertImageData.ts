@@ -1,10 +1,10 @@
 import type { ImageSegment } from './types';
+import { FPS } from '../videoConfig';
 
-const FPS = 30;
 const toFrame = (seconds: number) => Math.round(seconds * FPS);
 
 // ==== 挿入画像データ ====
-// 画像ファイルは public/images/ に配置
+// /supermovie-image-gen で自動生成されます
 export const insertImageData: ImageSegment[] = [
-  // 例: { id: 1, startFrame: toFrame(5), endFrame: toFrame(10), file: 'example.png', type: 'infographic' },
+  // 例: { id: 1, startFrame: toFrame(5), endFrame: toFrame(10), file: 'generated/example.png', type: 'infographic' },
 ];

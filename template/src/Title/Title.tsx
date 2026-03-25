@@ -7,6 +7,7 @@ import {
   Sequence,
 } from 'remotion';
 import { titleData } from './titleData';
+import { TELOP_CONFIG } from '../videoConfig';
 
 export interface TitleSegment {
   id: number;
@@ -43,8 +44,8 @@ const Title: React.FC<TitleProps> = ({ segment }) => {
     <div
       style={{
         position: 'absolute',
-        top: 40,
-        left: 40,
+        top: TELOP_CONFIG.titleTop,
+        left: TELOP_CONFIG.titleLeft,
         opacity,
         transform: `translateX(${translateX}px)`,
         zIndex: 100,
@@ -60,7 +61,7 @@ const Title: React.FC<TitleProps> = ({ segment }) => {
         <p
           style={{
             color: '#ffffff',
-            fontSize: 42,
+            fontSize: TELOP_CONFIG.titleFontSize,
             fontWeight: 800,
             fontFamily: '"Noto Sans JP", sans-serif',
             margin: 0,
