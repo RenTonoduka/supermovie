@@ -1,0 +1,17 @@
+{
+  "name": "supermovie-marketplace",
+  "owner": {
+    "name": "RenTonoduka"
+  },
+  "metadata": {
+    "description": "SuperMovie - Remotion動画編集自動化プラグイン",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "supermovie",
+      "source": ".",
+      "description": "テロップ・SE・タイトルを自動生成するRemotion動画編集スキル群"
+    }
+  ]
+}
