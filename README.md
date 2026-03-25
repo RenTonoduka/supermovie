@@ -27,8 +27,10 @@ claude --plugin-dir ~/.claude/plugins/supermovie
 | プロジェクト作成 | `/supermovie-init` | ヒアリング → Remotionプロジェクト自動生成 |
 | 文字起こし | `/supermovie-transcribe` | ローカルWhisperで高精度文字起こし |
 | 誤字修正 | `/supermovie-transcript-fix` | 辞書 + Claude LLMで誤字脱字修正 |
-| テロップ生成 | `/supermovie-subtitles` | 文字起こし → テロップ＆タイトル自動生成 |
-| SE配置 | `/supermovie-se` | テロップ分析 → 効果音自動配置 |
+| 動画カット | `/supermovie-cut` | Silero VAD + LLM分析で不要区間カット |
+| テロップ生成 | `/supermovie-subtitles` | LLM意味分割 + 改行処理でテロップ生成 |
+| 画像生成 | `/supermovie-image-gen` | Gemini APIで図解・画像を自動生成・配置 |
+| SE配置 | `/supermovie-se` | テロップ+画像分析 → 効果音自動配置 |
 | テロップ作成 | `/supermovie-telop-creator` | 新テロップスタイルをデザイン |
 | スキル追加 | `/supermovie-skill-creator` | 新しいスキルを設計・追加 |
 
@@ -38,7 +40,7 @@ claude --plugin-dir ~/.claude/plugins/supermovie
 あなた: 動画プロジェクトを作成して
         /path/to/your-video.mp4
 
-Claude: ヒアリング → プロジェクト生成 → 文字起こし → 誤字修正 → テロップ → SE → 完成
+Claude: ヒアリング → プロジェクト生成 → 文字起こし → 誤字修正 → カット → テロップ → 画像生成 → SE → 完成
 ```
 
 #### プラグインの更新
@@ -134,7 +136,8 @@ template/
 
 ### Claude Codeスキル使用時の追加要件
 - [Claude Code](https://claude.ai/claude-code)
-- AssemblyAI APIキー（テロップ自動生成に使用）
+- GEMINI_API_KEY（画像生成に使用）
+- AssemblyAI APIキー（話者分離が必要な場合のみ。1人の場合はローカルWhisperで無料）
 
 ## ライセンス
 

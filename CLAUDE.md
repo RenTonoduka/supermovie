@@ -141,6 +141,19 @@ interface TitleSegment {
 }
 ```
 
+### insertImageData.ts（ImageSegment型）
+
+```typescript
+interface ImageSegment {
+  id: number;
+  startFrame: number;
+  endFrame: number;
+  file: string;
+  type: 'photo' | 'infographic' | 'overlay';
+  scale?: number;
+}
+```
+
 ### cutData.ts（CutSegment型）
 
 ```typescript
@@ -176,6 +189,7 @@ type SoundEffect = {
 | 音声ファイル | `<PROJECT>/transcript_audio.wav` |
 | VAD結果 | `<PROJECT>/vad_result.json` |
 | カットデータ | `<PROJECT>/src/cutData.ts` |
+| 挿入画像データ | `<PROJECT>/src/InsertImage/insertImageData.ts` |
 | テロップデータ | `<PROJECT>/src/テロップテンプレート/telopData.ts` |
 | テロップスタイル | `<PROJECT>/src/テロップテンプレート/telopStyles.ts` |
 | テロップ型定義 | `<PROJECT>/src/テロップテンプレート/telopTypes.ts` |
@@ -184,7 +198,8 @@ type SoundEffect = {
 | ベース動画 | `<PROJECT>/public/main.mp4` |
 | SE素材 | `<PROJECT>/public/se/` |
 | BGM素材 | `<PROJECT>/public/BGM/` |
-| 挿入画像 | `<PROJECT>/public/images/` |
+| 挿入画像（手動配置） | `<PROJECT>/public/images/` |
+| 挿入画像（AI生成） | `<PROJECT>/public/images/generated/` |
 | Python仮想環境 | `<PROJECT>/.venv/` |
 | 生成画像 | `<PROJECT>/public/images/generated/` |
 | Gemini APIスクリプト | `~/.claude/skills/gemini-api-image/scripts/run.py` |

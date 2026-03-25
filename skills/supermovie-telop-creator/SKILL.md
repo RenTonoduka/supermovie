@@ -169,24 +169,12 @@ import {
   Easing,
 } from "remotion";
 
-// 字幕データの型定義（全テロップ共通）
-export interface SubtitleItem {
-  text: string;
-  lines: string[];
-  start: number;
-  end: number;
-  startFrame: number;
-  endFrame: number;
-}
+// テロップデータの型定義（CLAUDE.md統一ルール準拠）
+import type { TelopSegment } from '../テロップテンプレート/telopTypes';
+import { telopData } from '../テロップテンプレート/telopData';
 
-export interface SubtitleData {
-  fps: number;
-  subtitles: SubtitleItem[];
-}
-
-// Props: subtitleDataは必須、他はカスタマイズ可能なデフォルト値付き
+// Props: telopDataをimportして使用。他はカスタマイズ可能なデフォルト値付き
 interface <ComponentName>Props {
-  subtitleData: SubtitleData;
   fontSize?: number;
   bottomOffset?: number;
   fontFamily?: string;
@@ -202,14 +190,14 @@ export const <ComponentName>: React.FC<<ComponentName>Props> = ({
 }) => {
   const frame = useCurrentFrame();
 
-  // 字幕検索
-  const currentSubtitle = subtitleData.subtitles.find(
-    (sub) => frame >= sub.startFrame && frame <= sub.endFrame
+  // テロップ検索（telopDataから現在フレームを検索）
+  const currentTelop = telopData.find(
+    (t) => frame >= t.startFrame && frame <= t.endFrame
   );
-  if (!currentSubtitle) return null;
+  if (!currentTelop) return null;
 
   // フェードイン/アウト（共通パターン）
-  const duration = currentSubtitle.endFrame - currentSubtitle.startFrame;
+  const duration = currentTelop.endFrame - currentTelop.startFrame;
   const maxFadeDuration = Math.floor(duration / 3);
   const fadeInDuration = Math.min(3, maxFadeDuration);
   // ... opacity計算 ...

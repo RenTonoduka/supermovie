@@ -1,9 +1,9 @@
 import type { TelopSegment } from './telopTypes';
 
 // ===== 字幕データ（テンプレート） =====
-// /convert-srt コマンドで自動生成されます
+// /supermovie-subtitles で自動生成されます
 
-export const FPS = 25;
+export const FPS = 30;
 export const TOTAL_FRAMES = 0; // 動画の総フレーム数
 
 export const telopData: TelopSegment[] = [
