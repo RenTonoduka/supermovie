@@ -1,0 +1,13 @@
+{
+  "name": "supermovie",
+  "description": "Remotionベースの動画編集自動化プラグイン。テロップ・SE・タイトルを自動生成し、誰でも簡単にプロ品質の動画編集ができる。",
+  "version": "1.0.0",
+  "author": {
+    "name": "RenTonoduka"
+  },
+  "homepage": "https://github.com/RenTonoduka/supermovie",
+  "repository": "https://github.com/RenTonoduka/supermovie",
+  "license": "MIT",
+  "keywords": ["remotion", "video-editing", "telop", "subtitle", "sound-effects", "claude-code", "automation"],
+  "skills": ["./skills/"]
+}
