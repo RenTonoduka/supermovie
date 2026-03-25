@@ -9,8 +9,15 @@ Claude Code のスキルで、テロップ・SE・タイトルを自動生成。
 ### 方法1: Claude Code Plugin（推奨）
 
 ```bash
-# プラグインをインストール
-claude plugin add RenTonoduka/supermovie
+# 1. リポジトリをクローン
+git clone https://github.com/RenTonoduka/supermovie.git ~/.claude/plugins/supermovie
+
+# 2-A. 起動時にプラグイン指定
+claude --plugin-dir ~/.claude/plugins/supermovie
+
+# 2-B. または settings.json に追加して常に有効化（推奨）
+# ~/.claude/settings.json に以下を追加:
+# "pluginDirs": ["~/.claude/plugins/supermovie"]
 ```
 
 インストール後、Claude Code で以下のスキルが使えます:
@@ -18,7 +25,9 @@ claude plugin add RenTonoduka/supermovie
 | スキル | コマンド | 機能 |
 |--------|---------|------|
 | プロジェクト作成 | `/supermovie-init` | ヒアリング → Remotionプロジェクト自動生成 |
-| テロップ生成 | `/supermovie-subtitles` | 音声 → テロップ＆タイトル自動生成 |
+| 文字起こし | `/supermovie-transcribe` | ローカルWhisperで高精度文字起こし |
+| 誤字修正 | `/supermovie-transcript-fix` | 辞書 + Claude LLMで誤字脱字修正 |
+| テロップ生成 | `/supermovie-subtitles` | 文字起こし → テロップ＆タイトル自動生成 |
 | SE配置 | `/supermovie-se` | テロップ分析 → 効果音自動配置 |
 | テロップ作成 | `/supermovie-telop-creator` | 新テロップスタイルをデザイン |
 | スキル追加 | `/supermovie-skill-creator` | 新しいスキルを設計・追加 |
@@ -29,7 +38,13 @@ claude plugin add RenTonoduka/supermovie
 あなた: 動画プロジェクトを作成して
         /path/to/your-video.mp4
 
-Claude: （ヒアリング → プロジェクト生成 → テロップ → SE → 完成）
+Claude: ヒアリング → プロジェクト生成 → 文字起こし → 誤字修正 → テロップ → SE → 完成
+```
+
+#### プラグインの更新
+
+```bash
+cd ~/.claude/plugins/supermovie && git pull
 ```
 
 ### 方法2: GitHub Template
