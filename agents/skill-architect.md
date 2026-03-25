@@ -138,6 +138,8 @@ effort: high
     ↓ transcript.json
 /supermovie-transcript-fix    ← 誤字修正（辞書 + Claude LLM）
     ↓ transcript_fixed.json
+/supermovie-cut               ← 不要区間カット（VAD + LLM分析）
+    ↓ cutData.ts
 /supermovie-subtitles         ← テロップ＆タイトル生成
     ↓ telopData.ts + titleData.ts
 /supermovie-image-gen         ← 画像生成 + 配置データ

@@ -486,3 +486,25 @@ rm -f "<PROJECT>/transcribe_runner.py"
 | 長時間動画（1h超） | 所要時間見積もり表示、モデルダウングレード提案 |
 | ASSEMBLYAI_API_KEY 未設定 | ローカルエンジンを提案（話者1人なら不要と案内） |
 | 文字起こし結果が空 | 音声レベル確認、言語設定確認、モデル変更提案 |
+
+---
+
+## 連携マップ
+
+```
+/supermovie-init              ← ヒアリング → プロジェクト作成
+    ↓
+/supermovie-transcribe        ← ★ここ: 文字起こし（ローカル無料）
+    ↓ transcript.json
+/supermovie-transcript-fix    ← 誤字修正（辞書 + Claude LLM）
+    ↓ transcript_fixed.json
+/supermovie-cut               ← 不要区間カット（VAD + LLM分析）
+    ↓ cutData.ts
+/supermovie-subtitles         ← テロップ＆タイトル生成
+    ↓ telopData.ts + titleData.ts
+/supermovie-image-gen         ← 画像生成 + 配置データ
+    ↓ insertImageData.ts
+/supermovie-se                ← SE自動配置
+    ↓
+npm run dev                   ← プレビュー
+```

@@ -127,6 +127,8 @@ const VIDEO_DURATION_FRAMES = <計算値>;
 const FPS = <検出値>;
 const VIDEO_FILE = 'main.mp4';
 ```
+- width をformatに応じて設定（youtube: 1920, short: 1080, square: 1080）
+- height をformatに応じて設定（youtube: 1080, short: 1920, square: 1080）
 
 **テロップテンプレート/telopData.ts:**
 ```typescript
@@ -198,3 +200,25 @@ cd "<PROJECT_DIR>" && npx remotion studio
 | ffprobeがインストールされていない | `brew install ffmpeg` を提案 |
 | npm installが失敗 | node_modulesを削除して再実行 |
 | テンプレートが見つからない | テンプレートパスを確認 |
+
+---
+
+## 連携マップ
+
+```
+/supermovie-init              ← ★ここ: ヒアリング → プロジェクト作成
+    ↓
+/supermovie-transcribe        ← 文字起こし（ローカル無料）
+    ↓ transcript.json
+/supermovie-transcript-fix    ← 誤字修正（辞書 + Claude LLM）
+    ↓ transcript_fixed.json
+/supermovie-cut               ← 不要区間カット（VAD + LLM分析）
+    ↓ cutData.ts
+/supermovie-subtitles         ← テロップ＆タイトル生成
+    ↓ telopData.ts + titleData.ts
+/supermovie-image-gen         ← 画像生成 + 配置データ
+    ↓ insertImageData.ts
+/supermovie-se                ← SE自動配置
+    ↓
+npm run dev                   ← プレビュー
+```

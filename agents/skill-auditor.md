@@ -28,10 +28,12 @@ Principal quality assurance engineer として、SuperMovieエコシステム全
 5. template/src/テロップテンプレート/telopTypes.ts
 6. template/src/テロップテンプレート/telopData.ts
 7. template/src/InsertImage/types.ts
-8. template/src/SoundEffects/SEPlayer.ts
-9. template/src/Title/Title.tsx
-10. README.md
-11. .claude-plugin/plugin.json
+8. template/src/InsertImage/insertImageData.ts
+9. template/src/Title/titleData.ts
+10. template/src/SoundEffects/SEPlayer.ts
+11. template/src/Title/Title.tsx
+12. README.md
+13. .claude-plugin/plugin.json
 ```
 
 ### Step 2: 監査チェックリスト（全項目を順にチェック）

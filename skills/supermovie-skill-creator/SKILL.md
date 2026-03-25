@@ -162,17 +162,19 @@ mkdir -p .claude/skills/supermovie-<name>
 ## 既存スキルとの連携マップ
 
 ```
-/supermovie-init              ← プロジェクト作成（起点）
+/supermovie-init              ← ヒアリング → プロジェクト作成
     ↓
 /supermovie-transcribe        ← 文字起こし（ローカル無料）
-    ↓
+    ↓ transcript.json
 /supermovie-transcript-fix    ← 誤字修正（辞書 + Claude LLM）
-    ↓
+    ↓ transcript_fixed.json
+/supermovie-cut               ← 不要区間カット（VAD + LLM分析）
+    ↓ cutData.ts
 /supermovie-subtitles         ← テロップ＆タイトル生成
-    ↓
+    ↓ telopData.ts + titleData.ts
+/supermovie-image-gen         ← 画像生成 + 配置データ
+    ↓ insertImageData.ts
 /supermovie-se                ← SE自動配置
-    ↓
-（新スキルはここに挿入）
     ↓
 npm run dev                   ← プレビュー
 ```

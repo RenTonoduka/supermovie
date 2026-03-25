@@ -391,28 +391,8 @@ rm -f "<PROJECT>/vad_runner.py" "<PROJECT>/vad_result.json"
 
 ## 実行タイミングの注意
 
-```
-⚠️ カットは subtitles の前に実行するのが推奨
-
-/supermovie-init
-    ↓
-/supermovie-transcribe
-    ↓
-/supermovie-transcript-fix
-    ↓
-/supermovie-cut              ← ★ここ（テロップ生成前にカット）
-    ↓ カット後の transcript_fixed.json + cutData.ts
-/supermovie-subtitles        ← カット後のタイミングでテロップ生成
-    ↓
-/supermovie-image-gen
-    ↓
-/supermovie-se
-    ↓
-npm run dev
-
-※ subtitles の後にカットすると全テロップのフレーム再計算が必要になる
-※ カット前にやるのが効率的
-```
+カットは subtitles の前に実行するのが推奨。
+subtitles の後にカットすると全テロップのフレーム再計算が必要になるため、カット前にやるのが効率的。
 
 ---
 
@@ -426,3 +406,25 @@ npm run dev
 | カット後の動画が50%未満 | 警告 + カットモードを `silence-only` に変更提案 |
 | テロップのフレーム再計算でずれ | cutData.ts のマッピングを再検証 |
 | 音声ファイルが16kHzでない | ffmpegで再変換 |
+
+---
+
+## 連携マップ
+
+```
+/supermovie-init              ← ヒアリング → プロジェクト作成
+    ↓
+/supermovie-transcribe        ← 文字起こし（ローカル無料）
+    ↓ transcript.json
+/supermovie-transcript-fix    ← 誤字修正（辞書 + Claude LLM）
+    ↓ transcript_fixed.json
+/supermovie-cut               ← ★ここ: 不要区間カット（VAD + LLM分析）
+    ↓ cutData.ts
+/supermovie-subtitles         ← テロップ＆タイトル生成
+    ↓ telopData.ts + titleData.ts
+/supermovie-image-gen         ← 画像生成 + 配置データ
+    ↓ insertImageData.ts
+/supermovie-se                ← SE自動配置
+    ↓
+npm run dev                   ← プレビュー
+```
