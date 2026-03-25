@@ -12,7 +12,9 @@
     ↓ （ユーザー確認ポイント）
 /supermovie-subtitles         ← transcript_fixed.json → telopData.ts + titleData.ts
     ↓
-/supermovie-se                ← telopData.ts → seData.ts
+/supermovie-image-gen         ← テロップ分析 → 画像生成 + insertImageData.ts
+    ↓
+/supermovie-se                ← telopData.ts + insertImageData.ts → seData.ts
     ↓
 npm run dev                   ← Remotion Studioプレビュー
 ```
