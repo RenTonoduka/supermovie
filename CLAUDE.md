@@ -10,6 +10,8 @@
 /supermovie-transcript-fix    ← 誤字修正（辞書 + Claude LLM）
     ↓ transcript_fixed.json
     ↓ （ユーザー確認ポイント）
+/supermovie-cut               ← 不要区間カット（VAD + LLM分析）
+    ↓ cutData.ts
 /supermovie-subtitles         ← transcript_fixed.json → telopData.ts + titleData.ts
     ↓
 /supermovie-image-gen         ← テロップ分析 → 画像生成 + insertImageData.ts
@@ -139,6 +141,18 @@ interface TitleSegment {
 }
 ```
 
+### cutData.ts（CutSegment型）
+
+```typescript
+interface CutSegment {
+  id: number;
+  originalStart: number;   // 元動画のフレーム
+  originalEnd: number;
+  playbackStart: number;   // カット後の再生フレーム
+  playbackEnd: number;
+}
+```
+
 ### seData.ts（SoundEffect型）
 
 ```typescript
@@ -160,6 +174,8 @@ type SoundEffect = {
 | 修正履歴 | `<PROJECT>/transcript_corrections.json` |
 | 誤字辞書 | `<PROJECT>/typo_dict.json` |
 | 音声ファイル | `<PROJECT>/transcript_audio.wav` |
+| VAD結果 | `<PROJECT>/vad_result.json` |
+| カットデータ | `<PROJECT>/src/cutData.ts` |
 | テロップデータ | `<PROJECT>/src/テロップテンプレート/telopData.ts` |
 | テロップスタイル | `<PROJECT>/src/テロップテンプレート/telopStyles.ts` |
 | テロップ型定義 | `<PROJECT>/src/テロップテンプレート/telopTypes.ts` |
