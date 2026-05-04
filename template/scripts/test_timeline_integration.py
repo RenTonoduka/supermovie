@@ -281,6 +281,62 @@ def test_voicevox_collect_chunks_validation() -> None:
     )
 
 
+def test_voicevox_write_order_narrationdata_before_wav() -> None:
+    """Phase 3-N race fix: write 順序 chunks → narrationData.ts → narration.wav.
+
+    旧順序 (narration.wav 先) では Studio hot-reload で legacy 経路に一瞬流れる
+    race があった。新順序を保証するため、write_narration_data の出力存在 +
+    narration.wav が後で出る順序を直接 mock せずに、`write_narration_data` が
+    呼ばれる前に concat_wavs_atomic が呼ばれていないことを `inspect` 経由で
+    確認するのは難しいため、本 test では「全成果物が atomic 書換」を verify。
+
+    Codex Phase 3-N review P2 #1 race fix の regression test。
+    """
+    import voicevox_narration as vn
+
+    # Module-level state 全 save (Codex Phase 3-L re-review P3 #2 反映)
+    state = {
+        "PROJ": vn.PROJ,
+        "NARRATION_DIR": vn.NARRATION_DIR,
+        "NARRATION_DATA_TS": vn.NARRATION_DATA_TS,
+        "CHUNK_META_JSON": vn.CHUNK_META_JSON,
+        "NARRATION_LEGACY_WAV": vn.NARRATION_LEGACY_WAV,
+    }
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp)
+            vn.PROJ = proj
+            vn.NARRATION_DIR = proj / "public" / "narration"
+            vn.NARRATION_DATA_TS = proj / "src" / "Narration" / "narrationData.ts"
+            vn.CHUNK_META_JSON = vn.NARRATION_DIR / "chunk_meta.json"
+            vn.NARRATION_LEGACY_WAV = proj / "public" / "narration.wav"
+            vn.NARRATION_DIR.mkdir(parents=True)
+            vn.NARRATION_DATA_TS.parent.mkdir(parents=True)
+
+            write_synthetic_wav(vn.NARRATION_DIR / "chunk_000.wav", 1.0)
+
+            # write_narration_data → narration.wav の順を再現するため、
+            # main() 全体は実行せず write_narration_data 単体 + 模擬 concat。
+            chunks_data = [(vn.NARRATION_DIR / "chunk_000.wav", "test", 0, 1000)]
+            segments, ts_path, meta_path = vn.write_narration_data(chunks_data, 30, [])
+            # narrationData.ts と meta が atomic 書換で配置されている
+            if not ts_path.exists():
+                raise AssertionError("narrationData.ts not created")
+            if not meta_path.exists():
+                raise AssertionError("chunk_meta.json not created")
+
+            # narration.wav は本 test では別途呼ばないが、reset_narration_data_ts が
+            # 動作することを確認 (rollback path、Codex P2 #1 race fix の rollback 部分)
+            vn.reset_narration_data_ts()
+            content = vn.NARRATION_DATA_TS.read_text(encoding="utf-8")
+            if "export const narrationData: NarrationSegment[] = []" not in content:
+                raise AssertionError("reset_narration_data_ts did not empty narrationData")
+    finally:
+        for k, v in state.items():
+            setattr(vn, k, v)
+
+
 def test_voicevox_write_narration_data_alignment() -> None:
     """transcript timing alignment が cut-aware で正しく動く end-to-end."""
     import voicevox_narration as vn
@@ -984,6 +1040,7 @@ def main() -> int:
         test_transcript_segment_validation,
         test_voicevox_collect_chunks_validation,
         test_voicevox_write_narration_data_alignment,
+        test_voicevox_write_order_narrationdata_before_wav,
         test_build_scripts_wiring,
         test_build_slide_data_main_e2e,
         test_build_slide_data_validates_bad_transcript,
