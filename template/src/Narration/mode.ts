@@ -29,6 +29,11 @@ export type NarrationMode =
  * Remotion は 1 render で 1 JS context を使うため、context-fresh で
  * 自然に memo が消える (Studio hot-reload 時も module 再評価で reset)。
  *
+ * Phase 3-N (Codex Phase 3-M 推奨 ii): Studio hot-reload に対応するため
+ * `invalidateNarrationMode()` を追加、`useNarrationMode()` hook が
+ * `watchStaticFile` callback で invalidate + React state 更新する。
+ * Player / render は従来通り pure helper で動作。
+ *
  * 出典: https://www.remotion.dev/docs/getstaticfiles
  */
 let _modeCache: NarrationMode | undefined;
@@ -49,4 +54,14 @@ export const getNarrationMode = (): NarrationMode => {
     _modeCache = { kind: 'none' };
   }
   return _modeCache;
+};
+
+/**
+ * Phase 3-N: Studio hot-reload で _modeCache を無効化するための export。
+ * useNarrationMode hook (`src/Narration/useNarrationMode.ts`) が
+ * watchStaticFile callback から呼ぶ。Player / render path は呼ばない (memo
+ * を maintain するほうが速い)。
+ */
+export const invalidateNarrationMode = (): void => {
+  _modeCache = undefined;
 };

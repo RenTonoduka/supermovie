@@ -6,7 +6,7 @@ import { ImageSequence } from './InsertImage';
 import { TitleSequence } from './Title';
 import { SlideSequence } from './Slides';
 import { NarrationAudio } from './Narration';
-import { getNarrationMode } from './Narration/mode';
+import { useNarrationMode } from './Narration/useNarrationMode';
 import { VIDEO_FILE } from './videoConfig';
 
 export const MainVideo: React.FC = () => {
@@ -15,10 +15,11 @@ export const MainVideo: React.FC = () => {
   // narration が「鳴る」状態なら base 元音声を mute、'none' なら 1.0 で再生する。
   // これで NarrationAudio と判定が一致し、無音バグ (chunk 不足 + legacy 存在で
   // 両方消える) を防ぐ。
-  // 注意: Studio 起動後に narration を生成した場合、Studio reload (Cmd+R / `r` キー)
-  // で getStaticFiles cache を再生成する必要がある
-  // (https://www.remotion.dev/docs/getstaticfiles)。
-  const narrationMode = getNarrationMode();
+  // Phase 3-N: useNarrationMode() hook 経由で Studio hot-reload に対応。
+  // Studio で voicevox_narration.py 実行 → narrationData.ts / chunk wav 更新で
+  // watchStaticFile が発火、自動で React tree 再評価 (Cmd+R 不要)。
+  // Player / render path では watchStaticFile が no-op になるため従来動作と同じ。
+  const narrationMode = useNarrationMode();
   const baseVolume = narrationMode.kind === 'none' ? 1.0 : 0;
 
   return (
