@@ -264,6 +264,28 @@ type SoundEffect = {
 | `transcript_fixed.json` | transcript_corrected.json |
 | `transcript_audio.wav` | /tmp/supermovie_audio.wav |
 
+## Visual Smoke (Phase 3-G、format 切替後の dimension 検査)
+
+```bash
+cd <PROJECT>
+npm run visual-smoke   # 3 format × 2 frame の still + ffprobe + grid
+npm run test           # lint + visual-smoke を一気に
+```
+
+`scripts/visual_smoke.py` は `videoConfig.ts` の `FORMAT` を try/finally で
+youtube → short → square と切替て `npx remotion still` を 2 frame ずつ生成、
+各 PNG を ffprobe で検証する:
+
+| format | 期待 dimension |
+|--------|---------------|
+| youtube | 1920 × 1080 |
+| short   | 1080 × 1920 |
+| square  | 1080 × 1080 |
+
+mismatch 1 件以上で exit 2 (regression 即検知)。`out/visual_smoke/grid.png` で
+6 cell の目視レビュー、`summary.json` で機械可読なパス/失敗統計。
+原本 `videoConfig.ts` は finally で必ず復元される (途中 fail 安全)。
+
 ## アップデート手順
 
 「アップデートして」と言われたら以下を実行:

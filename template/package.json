@@ -29,7 +29,10 @@
     "build": "remotion bundle",
     "render": "remotion render MainVideo out/video.mp4",
     "upgrade": "remotion upgrade",
-    "lint": "eslint src && tsc"
+    "lint": "eslint src && tsc",
+    "visual-smoke": "python3 scripts/visual_smoke.py",
+    "test:visual-smoke": "python3 scripts/visual_smoke.py",
+    "test": "npm run lint && npm run test:visual-smoke"
   },
   "sideEffects": [
     "*.css"
