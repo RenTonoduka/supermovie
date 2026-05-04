@@ -14,8 +14,16 @@ Phase 3-H 拡張 (Codex CODEX_PHASE3H_NEXT, 2026-05-04):
 - src/Narration/narrationData.ts を all-or-nothing で生成
   (NarrationSegment[] = [{id, startFrame, durationInFrames, file, text}])
 - public/narration/chunk_meta.json も debug 用に出力
-- stale chunk (前回実行の遺物) を synthesis 前に必ず cleanup
-- partial failure 時は narrationData.ts を空に reset、二重音声防止
+- stale chunk + 旧 narration.wav (前回実行の遺物) を synthesis 前に必ず cleanup
+- partial failure 時は narrationData.ts を空に reset + 部分 chunk 削除、二重音声防止
+
+Phase 3-H review fix (Codex CODEX_REVIEW_PHASE3H_20260504T213301, P1×2 + P2×4):
+- 全 narration 出力 (narration.wav / narrationData.ts / chunk_meta.json) を
+  tempfile + os.replace で atomic 書き換え (SIGINT/disk full 安全、P2 #3)
+- FPS は src/videoConfig.ts の `export const FPS = N;` を一次 source に
+  (P2 #4 + P2 #5、project-config.json の malformed AttributeError と Remotion 実値ズレを解消)
+- wave.Error / EOFError を catch して exit 6 で all-or-nothing rollback (P2 #6)
+- partial failure 時に旧 narration.wav も削除 (P1 #2、stale legacy 再生事故防止)
 
 Usage:
     python3 scripts/voicevox_narration.py
@@ -23,7 +31,7 @@ Usage:
     python3 scripts/voicevox_narration.py --script narration.txt
     python3 scripts/voicevox_narration.py --list-speakers
     python3 scripts/voicevox_narration.py --require-engine
-    python3 scripts/voicevox_narration.py --fps 60      # FPS 明示 (default は project-config.json or 30)
+    python3 scripts/voicevox_narration.py --fps 60      # FPS 明示 (default は src/videoConfig.ts FPS)
 
 Engine 起動 (Roku ローカル):
     https://voicevox.hiroshiba.jp/ から VOICEVOX をインストール、起動すると
@@ -33,6 +41,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -47,13 +57,32 @@ DEFAULT_FPS = 30
 TIMEOUT = 30
 
 NARRATION_DIR = PROJ / "public" / "narration"
+NARRATION_LEGACY_WAV = PROJ / "public" / "narration.wav"
 NARRATION_DATA_TS = PROJ / "src" / "Narration" / "narrationData.ts"
 CHUNK_META_JSON = NARRATION_DIR / "chunk_meta.json"
+VIDEO_CONFIG = PROJ / "src" / "videoConfig.ts"
+FPS_LINE_RE = re.compile(r"^export const FPS\s*=\s*(\d+)\s*;", re.MULTILINE)
 EMPTY_NARRATION_DATA = (
     "import type { NarrationSegment } from './types';\n"
     "\n"
     "export const narrationData: NarrationSegment[] = [];\n"
 )
+
+
+def atomic_write_bytes(path: Path, data: bytes) -> None:
+    """tempfile + os.replace で atomic 書換 (Codex Phase 3-H review P2 #3 反映)。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
+
+
+def atomic_write_text(path: Path, content: str) -> None:
+    """tempfile + os.replace で atomic 書換 (Codex Phase 3-H review P2 #3 反映)。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def load_json(p: Path):
@@ -93,10 +122,16 @@ def synthesize(text: str, speaker: int) -> bytes:
     return wav_bytes
 
 
-def concat_wavs(wavs: list[Path], out_path: Path) -> None:
-    """同一 sample rate / channel の wav 列を時系列で結合."""
+def concat_wavs_atomic(wavs: list[Path], out_path: Path) -> None:
+    """同一 sample rate / channel の wav 列を時系列で結合し atomic に書く.
+
+    wave.Error は呼び出し側で catch して all-or-nothing rollback する
+    (Codex Phase 3-H review P2 #6 反映)。
+    """
     if not wavs:
         return
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out_path.with_name(f".{out_path.name}.tmp")
     with wave.open(str(wavs[0]), "rb") as w0:
         params = w0.getparams()
         frames = [w0.readframes(w0.getnframes())]
@@ -106,21 +141,28 @@ def concat_wavs(wavs: list[Path], out_path: Path) -> None:
                 print(f"WARN: {p.name} format mismatch、skip", file=sys.stderr)
                 continue
             frames.append(w.readframes(w.getnframes()))
-    with wave.open(str(out_path), "wb") as out:
+    with wave.open(str(tmp), "wb") as out:
         out.setparams(params)
         for f in frames:
             out.writeframes(f)
+    os.replace(tmp, out_path)
 
 
 def measure_duration_seconds(wav_path: Path) -> float:
-    """WAV header の (nframes / framerate) で正確な duration を返す."""
+    """WAV header の (nframes / framerate) で正確な duration を返す.
+
+    wave.Error / EOFError は呼び出し側で catch (Codex P2 #6 反映)。
+    """
     with wave.open(str(wav_path), "rb") as w:
         return w.getnframes() / float(w.getframerate())
 
 
-def cleanup_stale_chunks() -> None:
-    """旧 chunk_*.wav と chunk_meta.json を削除 (stale prevention)、
-    narrationData.ts も空 array に reset する。"""
+def cleanup_stale_all() -> None:
+    """旧 chunk_*.wav / chunk_meta.json / narration.wav / narrationData.ts を全 reset.
+
+    Codex Phase 3-H review P1 #2 反映: 旧 narration.wav が残ると partial failure 後に
+    legacy mode で stale narration が再生される事故を起こすため、必ず全削除する。
+    """
     if NARRATION_DIR.exists():
         for p in NARRATION_DIR.glob("chunk_*.wav"):
             try:
@@ -132,35 +174,52 @@ def cleanup_stale_chunks() -> None:
                 CHUNK_META_JSON.unlink()
             except OSError as e:
                 print(f"WARN: stale chunk_meta.json 削除失敗: {e}", file=sys.stderr)
+    if NARRATION_LEGACY_WAV.exists():
+        try:
+            NARRATION_LEGACY_WAV.unlink()
+        except OSError as e:
+            print(f"WARN: stale narration.wav 削除失敗: {e}", file=sys.stderr)
     reset_narration_data_ts()
 
 
 def reset_narration_data_ts() -> None:
-    """narrationData.ts を空 array に戻す (Phase 3-H all-or-nothing)。"""
+    """narrationData.ts を空 array に戻す (Phase 3-H all-or-nothing)、atomic 書換。"""
     if NARRATION_DATA_TS.parent.exists():
-        NARRATION_DATA_TS.write_text(EMPTY_NARRATION_DATA, encoding="utf-8")
+        atomic_write_text(NARRATION_DATA_TS, EMPTY_NARRATION_DATA)
 
 
-def read_render_fps(default: int = DEFAULT_FPS) -> int:
-    """project-config.json から source.fps.render_fps を取得、無ければ default。"""
-    cfg_path = PROJ / "project-config.json"
-    if not cfg_path.exists():
+def read_video_config_fps(default: int = DEFAULT_FPS) -> int:
+    """src/videoConfig.ts の `export const FPS = N;` を一次 source として読む.
+
+    Codex Phase 3-H review P2 #4 + P2 #5 反映: project-config.json の
+    malformed (cfg["source"] が None / str) で AttributeError を起こす経路と、
+    Remotion render が videoConfig.FPS を使う一方で script が project-config.json を
+    読むため両者がズレる経路の両方を、videoConfig.ts 直読で解消する。
+    """
+    if not VIDEO_CONFIG.exists():
         return default
     try:
-        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+        text = VIDEO_CONFIG.read_text(encoding="utf-8")
+    except OSError:
         return default
-    fps = cfg.get("source", {}).get("fps", {}).get("render_fps")
-    if isinstance(fps, (int, float)) and fps > 0:
-        return int(fps)
-    return default
+    m = FPS_LINE_RE.search(text)
+    if not m:
+        return default
+    try:
+        fps = int(m.group(1))
+    except ValueError:
+        return default
+    return fps if fps > 0 else default
 
 
 def write_narration_data(
     chunks: list[tuple[Path, str]],
     fps: int,
 ) -> tuple[list[dict], Path, Path]:
-    """各 chunk の duration を測って narrationData.ts と chunk_meta.json を書く."""
+    """各 chunk の duration を測って narrationData.ts と chunk_meta.json を書く.
+
+    両方とも atomic 書換 (Codex P2 #3 反映)。wave.Error は呼び出し側で catch。
+    """
     segments: list[dict] = []
     cumulative_frame = 0
     for i, (path, text) in enumerate(chunks):
@@ -177,19 +236,18 @@ def write_narration_data(
         })
         cumulative_frame += duration_frames
 
-    NARRATION_DIR.mkdir(parents=True, exist_ok=True)
-    CHUNK_META_JSON.write_text(
+    atomic_write_text(
+        CHUNK_META_JSON,
         json.dumps(
             {"fps": fps, "total_frames": cumulative_frame, "segments": segments},
             ensure_ascii=False,
             indent=2,
         ),
-        encoding="utf-8",
     )
 
     ts_lines = [
         "/**",
-        " * Phase 3-H: voicevox_narration.py が all-or-nothing で書き換えた narration timeline。",
+        " * Phase 3-H: voicevox_narration.py が all-or-nothing + atomic で書換える narration timeline。",
         " * NarrationAudio.tsx が <Sequence from={startFrame} durationInFrames={...}> でループ再生する。",
         " * 手動編集禁止 (script 再実行で上書きされる)。",
         " */",
@@ -209,8 +267,7 @@ def write_narration_data(
         )
     ts_lines.append("];")
     ts_lines.append("")
-    NARRATION_DATA_TS.parent.mkdir(parents=True, exist_ok=True)
-    NARRATION_DATA_TS.write_text("\n".join(ts_lines), encoding="utf-8")
+    atomic_write_text(NARRATION_DATA_TS, "\n".join(ts_lines))
 
     return segments, NARRATION_DATA_TS, CHUNK_META_JSON
 
@@ -246,7 +303,7 @@ def main():
         type=int,
         default=None,
         help=f"narrationData.ts に書き込む frame 換算 fps "
-             f"(default: project-config.json source.fps.render_fps、無ければ {DEFAULT_FPS})",
+             f"(default: src/videoConfig.ts FPS、読めなければ {DEFAULT_FPS})",
     )
     ap.add_argument("--allow-partial", action="store_true",
                     help="一部 chunk synthesis 失敗でも narration.wav を出力 + narrationData.ts 部分書き出し "
@@ -285,11 +342,15 @@ def main():
         print("ERROR: no narration chunks", file=sys.stderr)
         return 3
 
-    fps = args.fps if args.fps is not None else read_render_fps()
+    fps = args.fps if args.fps is not None else read_video_config_fps()
+    if fps <= 0:
+        print(f"ERROR: invalid fps={fps} (--fps is positive integer required)", file=sys.stderr)
+        return 4
     print(f"target fps: {fps}")
 
-    # Phase 3-H: stale chunk + narrationData.ts cleanup BEFORE synthesis
-    cleanup_stale_chunks()
+    # Phase 3-H: stale narration を全 reset BEFORE synthesis
+    # (chunk wav / chunk_meta.json / narration.wav / narrationData.ts 全部、Codex P1 #2)
+    cleanup_stale_all()
     NARRATION_DIR.mkdir(parents=True, exist_ok=True)
 
     chunk_paths: list[Path] = []
@@ -301,7 +362,7 @@ def main():
             print(f"WARN: synth failed for chunk {i}: {e}", file=sys.stderr)
             continue
         p = NARRATION_DIR / f"chunk_{i:03d}.wav"
-        p.write_bytes(wav_bytes)
+        atomic_write_bytes(p, wav_bytes)
         chunk_paths.append(p)
         chunk_texts.append(text)
         print(f"  chunk[{i:3}] {len(wav_bytes)} bytes  text='{text[:30]}…'")
@@ -315,24 +376,48 @@ def main():
             f"(--allow-partial で部分成功でも narration.wav 出力可)",
             file=sys.stderr,
         )
-        # Phase 3-H all-or-nothing: 部分書き出した chunk を削除し narrationData も空に戻す
+        # Phase 3-H all-or-nothing (Codex P1 #2): 部分 chunk + narrationData 全削除
+        # cleanup_stale_all() で narration.wav も含めて clean されているので追加削除のみ
         for p in chunk_paths:
             try:
                 p.unlink()
             except OSError:
                 pass
-        reset_narration_data_ts()
         return 6
 
     out_path = _resolve_path(args.output)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    concat_wavs(chunk_paths, out_path)
+    try:
+        concat_wavs_atomic(chunk_paths, out_path)
+    except (wave.Error, EOFError) as e:
+        print(f"ERROR: WAV concat failed (wave.Error / EOFError): {e}", file=sys.stderr)
+        for p in chunk_paths:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        return 6
     print(f"\nwrote: {out_path} ({out_path.stat().st_size} bytes)")
     print(f"chunks succeeded: {len(chunk_paths)} / {len(chunks)} synthesized")
 
     # Phase 3-H: chunk metadata + narrationData.ts (atomic、最後に書く)
     pairs = list(zip(chunk_paths, chunk_texts))
-    segments, ts_path, meta_path = write_narration_data(pairs, fps)
+    try:
+        segments, ts_path, meta_path = write_narration_data(pairs, fps)
+    except (wave.Error, EOFError) as e:
+        print(f"ERROR: WAV duration probe failed (wave.Error / EOFError): {e}", file=sys.stderr)
+        # narrationData/meta は temp 書き出しなので残らない、chunks は残るが atomic 失敗
+        # so user は再実行 or --allow-partial で部分書き出し選択可
+        for p in chunk_paths:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        if out_path.exists():
+            try:
+                out_path.unlink()
+            except OSError:
+                pass
+        return 6
     print(f"wrote: {ts_path} ({len(segments)} segments, {sum(s['durationInFrames'] for s in segments)} frames)")
     print(f"wrote: {meta_path}")
 

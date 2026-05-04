@@ -126,18 +126,25 @@ python3 <PROJECT>/scripts/voicevox_narration.py --require-engine
 | transcript_fixed.json 不在 | exit 3 (`--script` で迂回可) |
 | `/audio_query` HTTP エラー | chunk skip + WARN、全 chunk 失敗で exit 5 |
 | WAV 結合 format mismatch | chunk skip + WARN、可能な範囲で結合 |
-| partial chunk failure (--allow-partial なし) | exit 6、部分 chunk 削除 + narrationData.ts を空 array に reset |
+| partial chunk failure (--allow-partial なし) | exit 6、部分 chunk + 旧 narration.wav 全削除、narrationData.ts 空 array (all-or-nothing) |
+| WAV header 解析失敗 (wave.Error / EOFError) | exit 6、chunk + narration.wav 削除 (Codex Phase 3-H review P2 #6) |
+| FPS 不正 (--fps <= 0 / videoConfig.ts FPS regex 失敗) | exit 4 (前者) or default 30 fallback (後者) |
 
 ## 連携マップ
 
 ```
 /supermovie-init / transcribe / transcript-fix / cut / subtitles / slides
     ↓ transcript_fixed.json
-/supermovie-narration         ← ★ここ: VOICEVOX で narration.wav 生成
-    ↓ public/narration.wav
-MainVideo.tsx が public/narration.wav を自動検出 (asset gate)
-    └ NarrationAudio: <Audio src=narration.wav /> マウント
-    └ base Video: volume=0 に切替 (二重音声防止)
+/supermovie-narration         ← ★ここ: VOICEVOX で 3 出力を atomic 生成
+    ├─ public/narration/chunk_NNN.wav  (Phase 3-H、render 時に必要)
+    ├─ public/narration/chunk_meta.json (debug、fps + segments[])
+    ├─ src/Narration/narrationData.ts   (Phase 3-H render 駆動)
+    └─ public/narration.wav              (Phase 3-D legacy fallback)
+    ↓
+MainVideo.tsx + NarrationAudio.tsx が getNarrationMode() で判定
+    1) chunks complete → <Sequence> ループ + base mute
+    2) legacy narration.wav 存在 → 単一 <Audio> + base mute
+    3) どちらも不在 → null + base 元音声 1.0
     ↓
 npm run render
 ```

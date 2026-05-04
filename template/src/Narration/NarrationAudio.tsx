@@ -1,47 +1,25 @@
 import React from 'react';
-import { Audio, Sequence, getStaticFiles, staticFile } from 'remotion';
-import { narrationData } from './narrationData';
+import { Audio, Sequence, staticFile } from 'remotion';
+import { getNarrationMode } from './mode';
 
 interface NarrationAudioProps {
-  /** legacy 単一ファイル名 (public/ 配下、省略時 'narration.wav') */
-  file?: string;
   volume?: number;
 }
 
 /**
- * Phase 3-H: per-segment narration timeline (voicevox_narration.py が
- * narrationData.ts を生成する経路)。
+ * Phase 3-H: getNarrationMode() で chunks / legacy / none の三経路を分岐。
+ * MainVideo の hasNarration 判定とロジック共有 (Codex P1 #1 反映)。
  *
- * 動作優先順位:
- *   1) narrationData が non-empty かつ 全 chunk file が public/ に存在
- *      → 各 chunk を <Sequence from={startFrame} durationInFrames={...}>
- *        + <Audio /> でループ再生 (https://www.remotion.dev/docs/sequence)
- *   2) narrationData が空 + public/narration.wav 存在
- *      → legacy 単一 wav (Phase 3-D 互換、deterministic test 用)
- *   3) どちらも不在 → null (asset gate、Phase 3-F 互換)
- *
- * MainVideo.tsx の hasNarration 判定 (base mute 切替) と整合させること:
- * narrationData.length > 0 || public/narration.wav 存在 のどちらかで mute。
- *
- * volume はコールバック形式 ((frame) => volume) で Remotion lint 警告を回避
- * (https://www.remotion.dev/docs/audio/volume)。
+ * volume はコールバック形式 (Remotion lint 警告回避、
+ * https://www.remotion.dev/docs/audio/volume)。
  */
-export const NarrationAudio: React.FC<NarrationAudioProps> = ({
-  file = 'narration.wav',
-  volume = 1.0,
-}) => {
-  const staticFiles = getStaticFiles();
+export const NarrationAudio: React.FC<NarrationAudioProps> = ({ volume = 1.0 }) => {
+  const mode = getNarrationMode();
 
-  if (narrationData.length > 0) {
-    const allChunksExist = narrationData.every((seg) =>
-      staticFiles.some((f) => f.name === seg.file),
-    );
-    if (!allChunksExist) {
-      return null;
-    }
+  if (mode.kind === 'chunks') {
     return (
       <>
-        {narrationData.map((seg) => (
+        {mode.segments.map((seg) => (
           <Sequence
             key={seg.id}
             from={seg.startFrame}
@@ -54,9 +32,9 @@ export const NarrationAudio: React.FC<NarrationAudioProps> = ({
     );
   }
 
-  const hasFile = staticFiles.some((f) => f.name === file);
-  if (!hasFile) {
-    return null;
+  if (mode.kind === 'legacy') {
+    return <Audio src={staticFile(mode.file)} volume={() => volume} />;
   }
-  return <Audio src={staticFile(file)} volume={() => volume} />;
+
+  return null;
 };

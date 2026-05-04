@@ -1,36 +1,25 @@
-import { AbsoluteFill, Video, getStaticFiles, staticFile } from 'remotion';
+import { AbsoluteFill, Video, staticFile } from 'remotion';
 import { TelopPlayer } from './テロップテンプレート';
 import { SESequence } from './SoundEffects/SESequence';
 import { BGM } from './SoundEffects/BGM';
 import { ImageSequence } from './InsertImage';
 import { TitleSequence } from './Title';
 import { SlideSequence } from './Slides';
-import { NarrationAudio, narrationData } from './Narration';
+import { NarrationAudio } from './Narration';
+import { getNarrationMode } from './Narration/mode';
 import { VIDEO_FILE } from './videoConfig';
 
-const NARRATION_FILE = 'narration.wav';
-const NARRATION_CHUNK_PREFIX = 'narration/chunk_';
-
 export const MainVideo: React.FC = () => {
-  // Phase 3-F asset gate + Phase 3-H per-segment Sequence と連動:
-  // - legacy: public/narration.wav 存在 → base mute
-  // - phase3h: narrationData non-empty + chunk wav 存在 → base mute
-  // どちらも不在なら base 元音声 1.0 で再生。getStaticFiles は Studio/render 時に
-  // public/ 配下の asset 一覧を返す Remotion 公式 API
+  // Phase 3-F asset gate + Phase 3-H per-segment Sequence の mode helper を共有
+  // (Codex Phase 3-H review P1 #1 反映)。chunks / legacy / none のいずれでも
+  // narration が「鳴る」状態なら base 元音声を mute、'none' なら 1.0 で再生する。
+  // これで NarrationAudio と判定が一致し、無音バグ (chunk 不足 + legacy 存在で
+  // 両方消える) を防ぐ。
+  // 注意: Studio 起動後に narration を生成した場合、Studio reload (Cmd+R / `r` キー)
+  // で getStaticFiles cache を再生成する必要がある
   // (https://www.remotion.dev/docs/getstaticfiles)。
-  // 注意: Studio 起動後に narration を生成した場合、Studio リロード
-  // (Cmd+R / `r` キー) で反映する。新規 asset 追加に watchStaticFile を使う選択肢
-  // もあるが、現状は単純化のため reload 方式を採用。
-  const staticFiles = getStaticFiles();
-  const hasLegacyNarration = staticFiles.some((f) => f.name === NARRATION_FILE);
-  const hasChunkNarration =
-    narrationData.length > 0 &&
-    narrationData.every((seg) =>
-      staticFiles.some((f) => f.name === seg.file),
-    ) &&
-    staticFiles.some((f) => f.name.startsWith(NARRATION_CHUNK_PREFIX));
-  const hasNarration = hasLegacyNarration || hasChunkNarration;
-  const baseVolume = hasNarration ? 0 : 1.0;
+  const narrationMode = getNarrationMode();
+  const baseVolume = narrationMode.kind === 'none' ? 1.0 : 0;
 
   return (
     <AbsoluteFill style={{ backgroundColor: 'black' }}>
