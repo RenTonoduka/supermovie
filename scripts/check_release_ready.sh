@@ -7,20 +7,22 @@
 #   bash scripts/check_release_ready.sh
 #
 # Exit codes:
-#   0 = release-ready (全 gate pass)
+#   0 = release-ready (全 gate pass、lint は node_modules 不在で skip 可)
 #   1 = doc drift (regen --verify fail)
 #   2 = integration test fail
 #   3 = worktree dirty
 #   4 = unknown env (git / python3 不在)
+#   5 = npm run lint fail (node_modules 存在時のみ)
 #
 # 走らせる gate:
 #   1. git rev-parse / python3 / bash 環境チェック
 #   2. worktree clean (untracked / modified なし)
 #   3. scripts/regen_phase3_progress.sh --verify
 #   4. python3 template/scripts/test_timeline_integration.py
+#   5. (optional) cd template && npm run lint (Codex CODEX_GATE_VERIFY 推奨、
+#      node_modules 不在で skip)
 #
-# 走らせない gate (要 npm install / 実 project):
-#   - npm run lint (eslint + tsc)
+# 走らせない gate (実 project / 課金):
 #   - npm run visual-smoke (実 main.mp4 必要)
 #   - render e2e
 set -uo pipefail
@@ -80,10 +82,29 @@ else
     exit 2
 fi
 
+# 5. (optional) TS compile surface (lint + tsc)
+# Codex CODEX_GATE_VERIFY_20260504T232227 推奨: 4 gate に足すなら lint のみ。
+# node_modules 不在で skip (Roku 環境で npm install 後に再実行推奨)。
+echo
+echo "--- TS compile surface (optional) ---"
+if [ -d "$REPO_DIR/template/node_modules" ] && [ -x "$REPO_DIR/template/node_modules/.bin/eslint" ]; then
+    LINT_LOG=$(mktemp)
+    if (cd "$REPO_DIR/template" && npm run lint > "$LINT_LOG" 2>&1); then
+        echo "  [OK]   npm run lint pass (eslint + tsc)"
+        rm -f "$LINT_LOG"
+    else
+        echo "  [FAIL] npm run lint failed:"
+        tail -30 "$LINT_LOG" | sed 's/^/    /'
+        rm -f "$LINT_LOG"
+        exit 5
+    fi
+else
+    echo "  [SKIP] template/node_modules 不在、Roku 環境で npm install 後に再実行推奨"
+fi
+
 echo
 echo "=== ALL GATES PASS ==="
 echo "release-ready: yes (technical readiness only、Roku 判断領域は別途)"
 echo "  - PR / merge 戦略 (1 PR squash 推奨、Codex)"
 echo "  - 実 project visual-smoke / render e2e (main.mp4 fixture 必要)"
-echo "  - npm run lint (要 npm install、Roku 環境で再実行推奨)"
 exit 0
