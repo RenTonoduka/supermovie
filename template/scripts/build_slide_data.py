@@ -213,9 +213,107 @@ def render_slide_data_ts(slides: list[dict]) -> str:
     return "\n".join(lines)
 
 
+PLAN_VERSION = "supermovie.slide_plan.v1"
+ALLOWED_ALIGN = ("center", "left")
+ALLOWED_VIDEO_LAYER = ("visible", "dimmed", "hidden")
+
+
+def validate_slide_plan(plan: dict, words: list[dict], cut_total_frames: int | None,
+                        fmt: str) -> list[str]:
+    """Codex Phase 3-C validate (Q4) を実装。invalid なら理由を返す (空 list = OK)."""
+    title_max = TITLE_MAX_CHARS.get(fmt, TITLE_MAX_CHARS["short"])
+    bullet_max = BULLET_MAX_CHARS.get(fmt, BULLET_MAX_CHARS["short"])
+    errors: list[str] = []
+    if not isinstance(plan, dict):
+        return ["plan is not a dict"]
+    if plan.get("version") != PLAN_VERSION:
+        errors.append(f"version mismatch (expect {PLAN_VERSION})")
+    slides = plan.get("slides")
+    if not isinstance(slides, list):
+        errors.append("slides is not a list")
+        return errors
+    n_words = len(words)
+    last_end_idx = -1
+    last_id = 0
+    for i, s in enumerate(slides):
+        if not isinstance(s, dict):
+            errors.append(f"slides[{i}] not a dict")
+            continue
+        sid = s.get("id")
+        if not isinstance(sid, int) or sid <= last_id:
+            errors.append(f"slides[{i}].id must be ascending int (got {sid})")
+        else:
+            last_id = sid
+        sw = s.get("startWordIndex")
+        ew = s.get("endWordIndex")
+        if not (isinstance(sw, int) and isinstance(ew, int)
+                and 0 <= sw <= ew < n_words):
+            errors.append(f"slides[{i}] startWordIndex/endWordIndex out of range (got {sw}/{ew}, words={n_words})")
+            continue
+        if sw <= last_end_idx:
+            errors.append(f"slides[{i}] word range overlaps previous (sw={sw} <= prev end {last_end_idx})")
+        last_end_idx = ew
+        title = s.get("title")
+        if not isinstance(title, str) or not title.strip():
+            errors.append(f"slides[{i}].title empty")
+        elif len(title) > title_max:
+            errors.append(f"slides[{i}].title too long ({len(title)} > {title_max})")
+        bullets = s.get("bullets") or []
+        if not isinstance(bullets, list) or len(bullets) > MAX_BULLETS_PER_SLIDE:
+            errors.append(f"slides[{i}].bullets exceeds {MAX_BULLETS_PER_SLIDE}")
+        else:
+            for j, b in enumerate(bullets):
+                bt = b.get("text") if isinstance(b, dict) else None
+                if not isinstance(bt, str) or not bt.strip():
+                    errors.append(f"slides[{i}].bullets[{j}] empty text")
+                elif len(bt) > bullet_max:
+                    errors.append(f"slides[{i}].bullets[{j}] too long ({len(bt)} > {bullet_max})")
+        align = s.get("align")
+        if align is not None and align not in ALLOWED_ALIGN:
+            errors.append(f"slides[{i}].align invalid ({align})")
+        video_layer = s.get("videoLayer")
+        if video_layer is not None and video_layer not in ALLOWED_VIDEO_LAYER:
+            errors.append(f"slides[{i}].videoLayer invalid ({video_layer})")
+    return errors
+
+
+def build_slides_from_plan(plan: dict, words: list[dict], cut_segments: list[dict],
+                           fmt: str, tone: str) -> list[dict]:
+    """validated plan を SlideSegment dict 列に変換 (frame は script 側で計算)."""
+    style = style_for_tone(tone)
+    cut_total = cut_segments[-1]["playbackEnd"] if cut_segments else None
+    slides: list[dict] = []
+    for s in plan["slides"]:
+        sw = s["startWordIndex"]
+        ew = s["endWordIndex"]
+        ms_start = words[sw].get("start", 0)
+        ms_end = words[ew].get("end", 0)
+        pb_start = ms_to_playback_frame(ms_start, cut_segments)
+        pb_end = ms_to_playback_frame(ms_end, cut_segments)
+        if pb_start is None or pb_end is None or pb_end <= pb_start:
+            continue
+        if cut_total is not None:
+            pb_end = min(pb_end, cut_total)
+        slides.append({
+            "id": s["id"],
+            "startFrame": pb_start,
+            "endFrame": pb_end,
+            "title": s["title"],
+            "subtitle": s.get("subtitle"),
+            "bullets": s.get("bullets") or None,
+            "align": s.get("align") or style["align"],
+            "backgroundColor": s.get("backgroundColor") or style["bg"],
+            "videoLayer": s.get("videoLayer") or "visible",
+        })
+    return slides
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["topic", "segment"], default="topic")
+    ap.add_argument("--plan", help="optional slide_plan.json (LLM 生成)")
+    ap.add_argument("--strict-plan", action="store_true",
+                    help="--plan の validate 失敗時に exit 2 (default は warning + deterministic fallback)")
     args = ap.parse_args()
 
     transcript_path = PROJ / "transcript_fixed.json"
@@ -228,15 +326,43 @@ def main():
     fmt = config.get("format", "short")
     tone = config.get("tone", "プロフェッショナル")
     segments = transcript.get("segments", [])
+    words = transcript.get("words", [])
 
     vad_path = PROJ / "vad_result.json"
     vad = load_json(vad_path) if vad_path.exists() else None
     cut_segments = build_cut_segments_from_vad(vad)
+    cut_total_frames = cut_segments[-1]["playbackEnd"] if cut_segments else None
 
-    if args.mode == "topic":
-        slides = build_slides_topic_mode(segments, cut_segments, fmt, tone)
-    else:
-        slides = build_slides_segment_mode(segments, cut_segments, fmt, tone)
+    used_plan = False
+    if args.plan:
+        plan_path = Path(args.plan)
+        if not plan_path.exists():
+            msg = f"--plan path not found: {plan_path}"
+            if args.strict_plan:
+                raise SystemExit(msg)
+            print(f"WARN: {msg} → deterministic fallback")
+        else:
+            plan = load_json(plan_path)
+            errors = validate_slide_plan(plan, words, cut_total_frames, fmt)
+            if errors:
+                if args.strict_plan:
+                    print("ERROR: plan validation failed:")
+                    for e in errors:
+                        print(f"  - {e}")
+                    raise SystemExit(2)
+                print("WARN: plan validation failed, deterministic fallback:")
+                for e in errors:
+                    print(f"  - {e}")
+            else:
+                slides = build_slides_from_plan(plan, words, cut_segments, fmt, tone)
+                used_plan = True
+                print(f"=== plan accepted ({len(plan.get('slides', []))} slides) ===")
+
+    if not used_plan:
+        if args.mode == "topic":
+            slides = build_slides_topic_mode(segments, cut_segments, fmt, tone)
+        else:
+            slides = build_slides_segment_mode(segments, cut_segments, fmt, tone)
 
     out_path = PROJ / "src" / "Slides" / "slideData.ts"
     backup = PROJ / "src" / "Slides" / "slideData.backup.ts"
@@ -245,7 +371,8 @@ def main():
     ts = render_slide_data_ts(slides)
     out_path.write_text(ts, encoding="utf-8")
 
-    print(f"=== slideData.ts 生成 (mode={args.mode}) ===")
+    mode_label = "plan" if used_plan else f"deterministic-{args.mode}"
+    print(f"=== slideData.ts 生成 (mode={mode_label}) ===")
     print(f"path: {out_path}")
     print(f"input segments: {len(segments)}")
     print(f"output slides: {len(slides)}")

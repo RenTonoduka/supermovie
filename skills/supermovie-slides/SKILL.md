@@ -92,10 +92,59 @@ videoLayer:
 ## 実行コマンド
 
 ```bash
+# Phase 3-B (deterministic、default)
 python3 <PROJECT>/scripts/build_slide_data.py
-# または明示モード
 python3 <PROJECT>/scripts/build_slide_data.py --mode topic
+
+# Phase 3-C (LLM optional plan、ANTHROPIC_API_KEY 必須):
+ANTHROPIC_API_KEY=sk-ant-... python3 <PROJECT>/scripts/generate_slide_plan.py \
+  --output <PROJECT>/slide_plan.json
+python3 <PROJECT>/scripts/build_slide_data.py --plan <PROJECT>/slide_plan.json
+# --strict-plan で plan 検証失敗時 exit 2 (default は warning + deterministic fallback)
 ```
+
+## Phase 3-C: LLM optional plan (Codex CODEX_PHASE3C_LLM_PLAN_20260504T201229)
+
+**LLM 経路は word index ベースの plan を返し、frame は build script が変換する**。
+これにより LLM が frame 計算をミスっても整合性が保たれる。
+
+### slide_plan.json schema
+
+```json
+{
+  "version": "supermovie.slide_plan.v1",
+  "slides": [
+    {
+      "id": 1,
+      "startWordIndex": 0,
+      "endWordIndex": 30,
+      "title": "短い見出し",
+      "subtitle": "任意",
+      "bullets": [{ "text": "要点", "emphasis": true }],
+      "align": "left",
+      "videoLayer": "visible"
+    }
+  ]
+}
+```
+
+### validation ルール (build_slide_data.py)
+
+- `version` 完全一致 (`supermovie.slide_plan.v1`)
+- `slides` が配列、`id` 昇順
+- `0 <= startWordIndex <= endWordIndex < len(words)`
+- 隣接 slide の word range が overlap しない
+- `title` 非空 + format 別 max 文字数以内
+- `bullets` ≤ 5、各 `text` ≤ format 別 max
+- `align` ∈ {"center","left"}、`videoLayer` ∈ {"visible","dimmed","hidden"}
+
+invalid 時のデフォルト挙動: warning 出力 + deterministic (topic mode) fallback。
+`--strict-plan` 指定時は exit 2 で停止。
+
+### 設計の根拠
+
+LLM に frame を返させない理由は、word index → frame 変換に必要な情報 (cutData / VAD 適用、playback timeline 計算) は script 側にしかなく、LLM 推測だと cut 後 frame の整合が崩れるため。
+Anthropic 公式 structured outputs で JSON schema 出力を強制可能 (https://platform.claude.com/docs/en/build-with-claude/structured-outputs)。
 
 ## 完了時の報告フォーマット
 
