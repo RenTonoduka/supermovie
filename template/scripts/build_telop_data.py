@@ -32,8 +32,10 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parent))
 from timeline import (  # noqa: E402
     TranscriptSegmentError,
+    VadSchemaError,
     read_video_config_fps,
     validate_transcript_segment,
+    validate_vad_schema,
 )
 
 FPS = read_video_config_fps(PROJ)  # Phase 3-J: timeline 共通化、videoConfig.FPS と同期
@@ -237,6 +239,12 @@ def call_budoux(seg_texts: list[str]) -> list[list[str]]:
 
 # ---------------- VAD / cut ----------------
 def build_cut_segments_from_vad(vad):
+    """vad の speech_segments から cut timeline 構築 (Phase 3-K: validate 経由).
+
+    Codex Phase 3-J review P2 #2 反映: build_slide_data / voicevox_narration と
+    同じ validate_vad_schema を経由して、3 script で壊れた VAD の扱いを揃える。
+    """
+    validate_vad_schema(vad)
     speech = vad["speech_segments"]
     out = []
     cursor_ms = 0

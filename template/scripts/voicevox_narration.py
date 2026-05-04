@@ -402,34 +402,60 @@ def collect_chunks(args, transcript: dict) -> list[dict]:
             {"text": line.strip(), "sourceStartMs": None, "sourceEndMs": None}
             for line in text.splitlines() if line.strip()
         ]
+    # Codex Phase 3-J review P2 #1 反映: validate を `.get(...).strip()` より
+    # 先に通す。segment が非 dict / text 非 str だと AttributeError で落ちて
+    # TranscriptSegmentError として捕まらない経路があるため。
     if args.script_json:
         plan = load_json(_resolve_path(args.script_json))
+        if not isinstance(plan, dict):
+            raise TranscriptSegmentError(f"script-json must be dict, got {type(plan).__name__}")
+        plan_segments = plan.get("segments", [])
+        if not isinstance(plan_segments, list):
+            raise TranscriptSegmentError(
+                f"script-json segments must be list, got {type(plan_segments).__name__}"
+            )
         out: list[dict] = []
-        for i, s in enumerate(plan.get("segments", [])):
-            if not s.get("text", "").strip():
-                continue
-            # validate_transcript_segment は start/end key だけ見るので script-json
-            # の startMs/endMs を一旦同名 key にコピーして検証
+        for i, s in enumerate(plan_segments):
+            # validate を最初に通す (segment が非 dict なら raise)
             validate_transcript_segment(
-                {"text": s.get("text"), "start": s.get("startMs"), "end": s.get("endMs")},
+                # script-json schema は startMs/endMs だが、validate は start/end を見るので map
+                (
+                    {
+                        "text": s.get("text"),
+                        "start": s.get("startMs"),
+                        "end": s.get("endMs"),
+                    }
+                    if isinstance(s, dict)
+                    else s
+                ),
                 idx=i,
             )
+            text = (s.get("text") or "").strip()
+            if not text:
+                continue
             out.append(
                 {
-                    "text": s["text"].strip(),
+                    "text": text,
                     "sourceStartMs": s.get("startMs"),
                     "sourceEndMs": s.get("endMs"),
                 }
             )
         return out
+    transcript_segments = transcript.get("segments", []) if isinstance(transcript, dict) else []
+    if not isinstance(transcript_segments, list):
+        raise TranscriptSegmentError(
+            f"transcript segments must be list, got {type(transcript_segments).__name__}"
+        )
     out_t: list[dict] = []
-    for i, s in enumerate(transcript.get("segments", [])):
-        if not s.get("text", "").strip():
-            continue
+    for i, s in enumerate(transcript_segments):
+        # validate を最初に通す
         validate_transcript_segment(s, idx=i)
+        text = (s.get("text") or "").strip()
+        if not text:
+            continue
         out_t.append(
             {
-                "text": s["text"].strip(),
+                "text": text,
                 "sourceStartMs": s.get("start"),
                 "sourceEndMs": s.get("end"),
             }
@@ -511,6 +537,22 @@ def main():
         return 7
     NARRATION_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Codex Phase 3-J review P1 反映: VAD validation を synthesis 前 (cleanup 直後)
+    # に移動。VAD 破損時に synthesize / concat / narrationData 全 skip し、
+    # cleanup 直後の clean 状態で exit (stale narration.wav が legacy 経路に流れる
+    # 余地を完全に消す)。
+    try:
+        cut_segments = project_load_cut_segments(fps)
+    except (VadSchemaError, OSError, json.JSONDecodeError) as e:
+        print(
+            f"ERROR: vad_result.json schema invalid or unreadable: {e}",
+            file=sys.stderr,
+        )
+        # cleanup_stale_all() 直後で何も書いていない、追加 rollback 不要
+        return 8
+    if cut_segments:
+        print(f"cut-aware mapping: {len(cut_segments)} cut segments loaded from vad_result.json")
+
     chunk_paths: list[Path] = []
     chunk_meta: list[tuple[str, int | None, int | None]] = []  # (text, sourceStartMs, sourceEndMs)
     for i, ch in enumerate(chunks):
@@ -559,34 +601,15 @@ def main():
     print(f"chunks succeeded: {len(chunk_paths)} / {len(chunks)} synthesized")
 
     # Phase 3-H/I: chunk metadata + narrationData.ts (atomic、最後に書く)
-    # Codex Phase 3-I review P1 #2 反映: vad 部分破損は fail_fast で raise
-    # (legacy 経路で stale narration を出さないため)
-    try:
-        cut_segments = project_load_cut_segments(fps)
-    except (VadSchemaError, OSError, json.JSONDecodeError) as e:
-        print(
-            f"ERROR: vad_result.json schema invalid or unreadable: {e}",
-            file=sys.stderr,
-        )
-        # 全成果物を rollback (chunks + narration.wav)、narrationData は空のまま
-        for p in chunk_paths:
-            try:
-                p.unlink()
-            except OSError:
-                pass
-        if out_path.exists():
-            try:
-                out_path.unlink()
-            except OSError:
-                pass
-        return 8
-    if cut_segments:
-        print(f"cut-aware mapping: {len(cut_segments)} cut segments loaded from vad_result.json")
+    # cut_segments は synthesis 前 (Codex Phase 3-J review P1) で取得済み
 
-    # Codex Phase 3-I review P3 #6 反映: chunk_paths と chunk_meta の長さ assert
-    assert len(chunk_paths) == len(chunk_meta), (
-        f"chunk_paths ({len(chunk_paths)}) と chunk_meta ({len(chunk_meta)}) の長さズレ"
-    )
+    # Codex Phase 3-I review P3 #6 反映: chunk_paths と chunk_meta の長さ ガード
+    # python -O で assert は消えるため、runtime check + raise 化
+    # (Codex Phase 3-J review checklist 指摘)。
+    if len(chunk_paths) != len(chunk_meta):
+        raise RuntimeError(
+            f"chunk_paths ({len(chunk_paths)}) と chunk_meta ({len(chunk_meta)}) の長さズレ"
+        )
     pairs = [
         (path, text, source_start, source_end)
         for path, (text, source_start, source_end) in zip(chunk_paths, chunk_meta)

@@ -153,6 +153,8 @@ python3 <PROJECT>/scripts/voicevox_narration.py --require-engine
 | WAV header 解析失敗 (wave.Error / EOFError) | exit 6、chunk + narration.wav 削除 (Codex Phase 3-H review P2 #6) |
 | FPS 不正 (--fps <= 0 / videoConfig.ts FPS regex 失敗) | exit 4 (前者) or default 30 fallback (後者) |
 | stale narration.wav 削除失敗 (StaleCleanupError) | exit 7 (Codex Phase 3-H re-review P1 #2 partial 反映、stale legacy 再生事故防止) |
+| transcript validation 失敗 (TranscriptSegmentError) | exit 3 (start>end / 型不正 / 非 dict、collect_chunks で early raise、Codex Phase 3-I review P2 #3 反映) |
+| vad_result.json 部分破損 (VadSchemaError / OSError / JSONDecodeError) | exit 8 (synthesis 前に fail-fast、stale legacy が legacy mode へ流れる事故防止、Codex Phase 3-I review P1 #2 + Phase 3-J review P1 反映で synthesis 前に validation 移動済) |
 
 ## 連携マップ
 

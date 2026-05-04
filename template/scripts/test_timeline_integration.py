@@ -220,6 +220,32 @@ def test_voicevox_collect_chunks_validation() -> None:
     assert_eq(out[0]["sourceStartMs"], 0, "voicevox sourceStartMs")
     assert_eq(out[0]["sourceEndMs"], 1000, "voicevox sourceEndMs")
 
+    # Codex Phase 3-J review P2 #1 反映: validate を `.get(...).strip()` 前に通す
+    # 非 dict segment → TranscriptSegmentError
+    assert_raises(
+        lambda: vn.collect_chunks(Args(), {"segments": ["not a dict"]}),
+        vn.TranscriptSegmentError,
+        "voicevox non-dict segment",
+    )
+    # segments 非 list → TranscriptSegmentError
+    assert_raises(
+        lambda: vn.collect_chunks(Args(), {"segments": "wrong"}),
+        vn.TranscriptSegmentError,
+        "voicevox non-list segments",
+    )
+    # text 非 str (int) → TranscriptSegmentError
+    assert_raises(
+        lambda: vn.collect_chunks(Args(), {"segments": [{"text": 123}]}),
+        vn.TranscriptSegmentError,
+        "voicevox text non-str",
+    )
+    # text=None は filter (空文字列と同じ扱い、空 list 返す)
+    assert_eq(
+        vn.collect_chunks(Args(), {"segments": [{"text": None, "start": 0, "end": 100}]}),
+        [],
+        "voicevox text=None filtered",
+    )
+
 
 def test_voicevox_write_narration_data_alignment() -> None:
     """transcript timing alignment が cut-aware で正しく動く end-to-end."""
