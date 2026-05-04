@@ -137,9 +137,13 @@ main
 - supermovie-se 統合 (素材判断)
 - SadTalker / HeyGen / Kling 統合 (法的 / モラルリスク + API 課金)
 
-## 全 commit count (roku/phase3j-timeline branch、最新 18 件)
+## 全 commit count (roku/phase3j-timeline branch、最新 22 件)
 
 ```
+d41ec9c fix(narration): Codex Phase 3-O fix re-review P1 + P2 #2 actual code fix
+b70b592 fix(narration): Codex Phase 3-O fix re-review P1 + P2×2 + P3 全 fix
+aacc5dc test(narration): write 順序 race fix の regression test (Phase 3-O follow-up)
+9876e61 docs(phase3): regen commit chain section to 18 commits
 a5fcb80 fix(narration): Studio hot-reload race + PHASE3_PROGRESS body update (Phase 3-N review fix)
 d10cd92 feat(docs): PHASE3_PROGRESS.md auto-gen helper (Phase 3-O ii)
 6c8fb00 test(timeline): build_slide_data --plan validation 経路 (Phase 3-O i / Codex P2 #3)
@@ -160,7 +164,7 @@ e2a1a39 fix(timeline): Codex Phase 3-J review 4 件 fix (P1×1 + P2×2 + P3×1)
 66e2aeb feat(timeline): timeline.py 共通化 + Phase 3-I review 6 件 fix (Phase 3-J)
 ```
 
-(更新: 2026-05-04_22:57、`scripts/regen_phase3_progress.sh` で auto-gen、最新 commit を反映)
+(更新: 2026-05-04_23:05、`scripts/regen_phase3_progress.sh` で auto-gen、最新 commit を反映)
 
 ## Test gates
 
