@@ -285,34 +285,50 @@ def test_voicevox_write_narration_data_alignment() -> None:
     """transcript timing alignment が cut-aware で正しく動く end-to-end."""
     import voicevox_narration as vn
 
-    with tempfile.TemporaryDirectory() as tmp:
-        proj = Path(tmp)
-        vn.PROJ = proj
-        vn.NARRATION_DIR = proj / "public" / "narration"
-        vn.NARRATION_DATA_TS = proj / "src" / "Narration" / "narrationData.ts"
-        vn.CHUNK_META_JSON = vn.NARRATION_DIR / "chunk_meta.json"
-        vn.NARRATION_DIR.mkdir(parents=True)
-        vn.NARRATION_DATA_TS.parent.mkdir(parents=True)
+    # Codex Phase 3-L re-review P3 #2 反映: module-level state を try/finally で
+    # restore (test 間 leak 防止、後続 voicevox test 追加時の汚染回避)。
+    original_proj = vn.PROJ
+    original_narration_dir = vn.NARRATION_DIR
+    original_narration_data_ts = vn.NARRATION_DATA_TS
+    original_chunk_meta_json = vn.CHUNK_META_JSON
+    original_narration_legacy_wav = vn.NARRATION_LEGACY_WAV
 
-        write_synthetic_wav(vn.NARRATION_DIR / "chunk_000.wav", 1.0)
-        write_synthetic_wav(vn.NARRATION_DIR / "chunk_001.wav", 0.5)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp)
+            vn.PROJ = proj
+            vn.NARRATION_DIR = proj / "public" / "narration"
+            vn.NARRATION_DATA_TS = proj / "src" / "Narration" / "narrationData.ts"
+            vn.CHUNK_META_JSON = vn.NARRATION_DIR / "chunk_meta.json"
+            vn.NARRATION_LEGACY_WAV = proj / "public" / "narration.wav"
+            vn.NARRATION_DIR.mkdir(parents=True)
+            vn.NARRATION_DATA_TS.parent.mkdir(parents=True)
 
-        # No cut, transcript timing 0ms と 1000ms
-        chunks_data = [
-            (vn.NARRATION_DIR / "chunk_000.wav", "first", 0, 1000),
-            (vn.NARRATION_DIR / "chunk_001.wav", "second", 1000, 1500),
-        ]
-        segments, ts_path, meta_path = vn.write_narration_data(chunks_data, 30, [])
-        assert_eq(segments[0]["startFrame"], 0, "chunk0 startFrame")
-        assert_eq(segments[0]["durationInFrames"], 30, "chunk0 dur")
-        assert_eq(segments[0]["timing_source"], "transcript_aligned", "chunk0 source")
-        assert_eq(segments[1]["startFrame"], 30, "chunk1 startFrame (1000ms*30fps)")
+            write_synthetic_wav(vn.NARRATION_DIR / "chunk_000.wav", 1.0)
+            write_synthetic_wav(vn.NARRATION_DIR / "chunk_001.wav", 0.5)
 
-        # Verify TS file is valid
-        ts = ts_path.read_text(encoding="utf-8")
-        assert "narrationData" in ts
-        assert "sourceStartMs: 0" in ts
-        assert "sourceStartMs: 1000" in ts
+            # No cut, transcript timing 0ms と 1000ms
+            chunks_data = [
+                (vn.NARRATION_DIR / "chunk_000.wav", "first", 0, 1000),
+                (vn.NARRATION_DIR / "chunk_001.wav", "second", 1000, 1500),
+            ]
+            segments, ts_path, meta_path = vn.write_narration_data(chunks_data, 30, [])
+            assert_eq(segments[0]["startFrame"], 0, "chunk0 startFrame")
+            assert_eq(segments[0]["durationInFrames"], 30, "chunk0 dur")
+            assert_eq(segments[0]["timing_source"], "transcript_aligned", "chunk0 source")
+            assert_eq(segments[1]["startFrame"], 30, "chunk1 startFrame (1000ms*30fps)")
+
+            # Verify TS file is valid
+            ts = ts_path.read_text(encoding="utf-8")
+            assert "narrationData" in ts
+            assert "sourceStartMs: 0" in ts
+            assert "sourceStartMs: 1000" in ts
+    finally:
+        vn.PROJ = original_proj
+        vn.NARRATION_DIR = original_narration_dir
+        vn.NARRATION_DATA_TS = original_narration_data_ts
+        vn.CHUNK_META_JSON = original_chunk_meta_json
+        vn.NARRATION_LEGACY_WAV = original_narration_legacy_wav
 
 
 def _setup_temp_project(tmp: Path, fps: int = 30) -> Path:

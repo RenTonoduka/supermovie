@@ -538,10 +538,13 @@ def main():
 
     # Codex Phase 3-J review P1 反映: VAD validation を synthesis 前 (cleanup 直後)
     # に移動。VAD 破損時に synthesize / concat / narrationData 全 skip し、
-    # cleanup 直後の clean 状態で exit (stale narration.wav が legacy 経路に流れる
-    # 余地を完全に消す)。
+    # stale narration.wav が legacy 経路に流れる余地を消す。
     # Codex Phase 3-J fix re-review P1 partial 反映: NARRATION_DIR.mkdir() は
-    # VAD validation 成功後に行う (vad 破損で何も書かない契約を厳密化)。
+    # VAD validation 成功後 (mkdir 順序契約)。
+    # Codex Phase 3-L re-review P2 #1 反映: cleanup_stale_all() は narrationData.ts
+    # を空 array に atomic 上書きする (all-or-nothing 契約の一部)。「何も書かない」
+    # ではなく「成果物は cleanup 段階の clean state で固定、VAD 破損なら
+    # narration.wav / chunk wav / 非空 narrationData.ts は一切作らず exit 8」が正しい契約。
     try:
         cut_segments = project_load_cut_segments(fps)
     except (VadSchemaError, OSError, json.JSONDecodeError) as e:
@@ -549,7 +552,8 @@ def main():
             f"ERROR: vad_result.json schema invalid or unreadable: {e}",
             file=sys.stderr,
         )
-        # cleanup_stale_all() 直後 + mkdir 未実行で何も書いていない、追加 rollback 不要
+        # cleanup_stale_all() 直後で narrationData.ts は空 array、その他成果物
+        # (chunk wav / narration.wav / chunk_meta.json) は未生成、mkdir も未実行。
         return 8
     NARRATION_DIR.mkdir(parents=True, exist_ok=True)
     if cut_segments:
