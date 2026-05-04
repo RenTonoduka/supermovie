@@ -93,7 +93,8 @@ main
 | CODEX_REVIEW_PHASE3I_AND_NEXT_20260504T215824 | Phase 3-I | P1×2 + P2×2 + P3×2、Phase 3-J で全 fix |
 | CODEX_REVIEW_PHASE3J_AND_NEXT_20260504T221120 | Phase 3-J | P1×1 + P2×2 + P3×1、Phase 3-J review fix で close |
 | CODEX_REVIEW_PHASE3J_FIX_AND_3L_20260504T222048 | Phase 3-J fix | 4/5 ✅ + P1 partial (NARRATION_DIR.mkdir 順序)、即 fix 済 |
-| CODEX_REVIEW_PHASE3L_AND_3M_20260504T222846 | Phase 3-L vi + P1 partial fix | (進行中) |
+| CODEX_REVIEW_PHASE3L_AND_3M_20260504T222846 | Phase 3-L vi + P1 partial fix | P2 #1 (cleanup contract コメント) + P2 #2 (test isolation)、94bc3d5 で全 fix |
+| CODEX_REVIEW_PHASE3M_AND_3N_20260504T223552 | Phase 3-M comprehensive | P0/P1 なし、P2×3 (PHASE3_PROGRESS 不正確 / API key restore / API mock schema validation 未踏)、Phase 3-N 推奨 ii Studio hot-reload |
 
 ## 未着手 / 残候補
 
@@ -109,9 +110,13 @@ main
 - supermovie-se 統合 (素材判断)
 - SadTalker / HeyGen / Kling 統合 (法的 / モラルリスク + API 課金)
 
-## 全 commit count (roku/phase3j-timeline branch、9 件)
+## 全 commit count (roku/phase3j-timeline branch、最新 13 件)
 
 ```
+ae3d2e8 test(timeline): generate_slide_plan API HTTP error + invalid JSON path (Phase 3-N i+)
+8abdb2b test(timeline): generate_slide_plan Anthropic API mock test (Phase 3-N i)
+94bc3d5 fix(timeline): Codex Phase 3-L re-review P2 2 件 fix
+47e6c39 docs(phase3): Phase 3 progress note + Codex review artifacts (Phase 3-M v)
 bed46b7 test(timeline): generate_slide_plan skip + missing inputs subtest (Phase 3-M iii)
 350dff7 refactor(telop): ms_to_playback_frame を timeline 経由に統一 (Phase 3-M ii)
 3c765e3 test(timeline): build_telop_data e2e + bad transcript subtest (Phase 3-M core 1)
@@ -122,6 +127,10 @@ e2a1a39 fix(timeline): Codex Phase 3-J review 4 件 fix
 398ea94 test(timeline): pure python integration smoke test
 66e2aeb feat(timeline): timeline.py 共通化 + Phase 3-I review 6 件 fix
 ```
+
+(更新: 2026-05-04 22:42、Codex Phase 3-M review P2 #1 反映で 9 件 → 13 件 + 後続
+fix commit に追従するため `git log roku/phase3i-transcript-alignment..HEAD --oneline`
+を一次 source として参照すること。)
 
 ## Test gates
 

@@ -580,6 +580,9 @@ def test_generate_slide_plan_missing_inputs() -> None:
     import os as _os
 
     original_proj = gsp.PROJ
+    # Codex Phase 3-M review P2 #2 反映: 既存 ANTHROPIC_API_KEY を save、
+    # finally で復元 (test 間の env leak 防止)。
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")
     with tempfile.TemporaryDirectory() as tmp:
         gsp.PROJ = Path(tmp)  # transcript_fixed.json / project-config.json なし
         _os.environ["ANTHROPIC_API_KEY"] = "test-key-fake"
@@ -593,7 +596,10 @@ def test_generate_slide_plan_missing_inputs() -> None:
             finally:
                 _sys.argv = old_argv
         finally:
-            del _os.environ["ANTHROPIC_API_KEY"]
+            if original_api_key is None:
+                _os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                _os.environ["ANTHROPIC_API_KEY"] = original_api_key
             gsp.PROJ = original_proj
 
 
@@ -641,6 +647,7 @@ def test_generate_slide_plan_api_mock_success() -> None:
 
     original_urlopen = _urlreq.urlopen
     original_proj = gsp.PROJ
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")  # Codex P2 #2 反映
 
     with tempfile.TemporaryDirectory() as tmp:
         proj = Path(tmp)
@@ -677,7 +684,10 @@ def test_generate_slide_plan_api_mock_success() -> None:
             finally:
                 _sys.argv = old_argv
         finally:
-            _os.environ.pop("ANTHROPIC_API_KEY", None)
+            if original_api_key is None:
+                _os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                _os.environ["ANTHROPIC_API_KEY"] = original_api_key
             _urlreq.urlopen = original_urlopen
             gsp.PROJ = original_proj
 
@@ -701,6 +711,7 @@ def test_generate_slide_plan_api_http_error() -> None:
 
     original_urlopen = _urlreq.urlopen
     original_proj = gsp.PROJ
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")  # Codex P2 #2 反映
 
     with tempfile.TemporaryDirectory() as tmp:
         proj = Path(tmp)
@@ -725,7 +736,10 @@ def test_generate_slide_plan_api_http_error() -> None:
             finally:
                 _sys.argv = old_argv
         finally:
-            _os.environ.pop("ANTHROPIC_API_KEY", None)
+            if original_api_key is None:
+                _os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                _os.environ["ANTHROPIC_API_KEY"] = original_api_key
             _urlreq.urlopen = original_urlopen
             gsp.PROJ = original_proj
 
@@ -758,6 +772,7 @@ def test_generate_slide_plan_api_invalid_json() -> None:
 
     original_urlopen = _urlreq.urlopen
     original_proj = gsp.PROJ
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")  # Codex P2 #2 反映
 
     with tempfile.TemporaryDirectory() as tmp:
         proj = Path(tmp)
@@ -782,7 +797,10 @@ def test_generate_slide_plan_api_invalid_json() -> None:
             finally:
                 _sys.argv = old_argv
         finally:
-            _os.environ.pop("ANTHROPIC_API_KEY", None)
+            if original_api_key is None:
+                _os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                _os.environ["ANTHROPIC_API_KEY"] = original_api_key
             _urlreq.urlopen = original_urlopen
             gsp.PROJ = original_proj
 
