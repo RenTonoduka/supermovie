@@ -79,13 +79,16 @@ export interface TelopAnimationSpring {
   mass: number;
 }
 
+/** Phase 3-R re-review 危険 top1 反映: literal narrowing。 */
+export type TelopSlideDirection = 'up' | 'down' | 'left' | 'right';
+
 export interface TelopAnimationConfig {
   name: string;
   fadeInDuration: number;
   fadeOutDuration: number;
   slideInDistance: number;
-  /** 全 animation が持つ ('up' / 'down' / 'left' / 'right'、telopStyles.ts では `as const`) */
-  slideDirection: string;
+  /** 全 animation が持つ、telopStyles.ts では `as const` で literal */
+  slideDirection: TelopSlideDirection;
   /** charByChar 系のみ持つ、各文字の遅延 frame */
   charDelay?: number;
   spring: TelopAnimationSpring;
