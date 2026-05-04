@@ -297,9 +297,11 @@ def main():
 
     # Phase 3-K (Codex Phase 3-I review P2 #3 拡張): build_telop でも transcript
     # 壊れたデータを早期検出。
+    # Phase 3-L: require_timing=True で start/end 必須化 (telop は ms→frame
+    # 変換で start/end を必須使用するため)。
     for i, seg in enumerate(segments):
         try:
-            validate_transcript_segment(seg, idx=i)
+            validate_transcript_segment(seg, idx=i, require_timing=True)
         except TranscriptSegmentError as e:
             raise SystemExit(f"transcript validation failed: {e}")
 

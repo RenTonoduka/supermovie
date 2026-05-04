@@ -326,11 +326,12 @@ def main():
     words = transcript.get("words", [])
 
     # Phase 3-K (Codex Phase 3-I review P2 #3 拡張): build_slide_data でも
-    # transcript の壊れたデータを早期検出 (start>end / 型不正)。voicevox_narration
-    # と同じ validate_transcript_segment を経由。
+    # transcript の壊れたデータを早期検出 (start>end / 型不正)。
+    # Phase 3-L: require_timing=True で start/end 必須化 (slide は timing 駆動、
+    # ms_to_playback_frame 呼出箇所 4 件すべてで start/end を使用するため)。
     for i, seg in enumerate(segments):
         try:
-            validate_transcript_segment(seg, idx=i)
+            validate_transcript_segment(seg, idx=i, require_timing=True)
         except TranscriptSegmentError as e:
             raise SystemExit(f"transcript validation failed: {e}")
 

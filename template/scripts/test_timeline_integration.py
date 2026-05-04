@@ -198,6 +198,40 @@ def test_transcript_segment_validation() -> None:
         "start non-numeric",
     )
 
+    # Phase 3-L (Codex Phase 3-J review Part B 推奨): require_timing=True で
+    # start/end 必須化、欠落 / None で raise。
+    assert_raises(
+        lambda: timeline.validate_transcript_segment(
+            {"text": "hi"}, 0, require_timing=True
+        ),
+        timeline.TranscriptSegmentError,
+        "require_timing missing both",
+    )
+    assert_raises(
+        lambda: timeline.validate_transcript_segment(
+            {"text": "hi", "start": 0, "end": None}, 0, require_timing=True
+        ),
+        timeline.TranscriptSegmentError,
+        "require_timing end None",
+    )
+    # OK: require_timing=True + 両方 numeric
+    timeline.validate_transcript_segment(
+        {"text": "hi", "start": 0, "end": 1000}, 0, require_timing=True
+    )
+
+    # validate_transcript_segments 一括 helper
+    out = timeline.validate_transcript_segments(
+        [{"text": "a", "start": 0, "end": 100}, {"text": "b", "start": 100, "end": 200}],
+        require_timing=True,
+    )
+    assert_eq(len(out), 2, "validate_transcript_segments OK length")
+    # 非 list で raise
+    assert_raises(
+        lambda: timeline.validate_transcript_segments("not a list"),
+        timeline.TranscriptSegmentError,
+        "validate_transcript_segments non-list",
+    )
+
 
 def test_voicevox_collect_chunks_validation() -> None:
     """voicevox_narration.collect_chunks が壊れた transcript で raise する."""

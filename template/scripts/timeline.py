@@ -155,11 +155,17 @@ class TranscriptSegmentError(ValueError):
     """transcript segment の型 / 順序 異常 (Codex P2 #3 反映)."""
 
 
-def validate_transcript_segment(seg: object, idx: int = -1) -> dict:
+def validate_transcript_segment(
+    seg: object, idx: int = -1, require_timing: bool = False
+) -> dict:
     """transcript_fixed.json の 1 segment の最低限検査.
 
-    必須: dict に `text` (str)、`start` / `end` が int|float|None。start/end
+    必須: dict に `text` (str|None)、`start` / `end` が int|float|None。
     両方 numeric なら start <= end。違反は TranscriptSegmentError。
+
+    require_timing=True: start / end の両方が int|float 必須 (None / 欠落 NG)。
+    build_slide_data / build_telop_data など timing 駆動の script で使う
+    (Codex Phase 3-J review Part B 設計概要 反映)。
     """
     label = f"segment[{idx}]" if idx >= 0 else "segment"
     if not isinstance(seg, dict):
@@ -176,6 +182,33 @@ def validate_transcript_segment(seg: object, idx: int = -1) -> dict:
             raise TranscriptSegmentError(
                 f"{label}.{k} must be int|float|None, got {type(v).__name__}"
             )
+    if require_timing:
+        if not isinstance(s, (int, float)):
+            raise TranscriptSegmentError(
+                f"{label}.start required (int|float), got {type(s).__name__}"
+            )
+        if not isinstance(e, (int, float)):
+            raise TranscriptSegmentError(
+                f"{label}.end required (int|float), got {type(e).__name__}"
+            )
     if isinstance(s, (int, float)) and isinstance(e, (int, float)) and s > e:
         raise TranscriptSegmentError(f"{label} start={s} > end={e}")
     return seg
+
+
+def validate_transcript_segments(
+    segments: object, require_timing: bool = False
+) -> list[dict]:
+    """segments[] 一括検証 (Codex Phase 3-J review Part B 推奨).
+
+    segments が list でない / 各要素が validate に通らない場合 raise。
+    require_timing=True で start/end 必須の strict mode (slide / telop 用)。
+    """
+    if not isinstance(segments, list):
+        raise TranscriptSegmentError(
+            f"segments must be list, got {type(segments).__name__}"
+        )
+    return [
+        validate_transcript_segment(seg, idx=i, require_timing=require_timing)
+        for i, seg in enumerate(segments)
+    ]
