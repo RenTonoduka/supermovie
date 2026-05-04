@@ -131,7 +131,10 @@ def main():
             print(f"ERROR: {msg}", file=sys.stderr)
             return 4
         print(f"INFO: {msg} -> narration generation skipped")
-        print("      base video の元音声を維持、Remotion 側で <NarrationAudio /> は null を返す")
+        print(
+            "      Remotion 側の <NarrationAudio /> は public/narration.wav 不在を "
+            "getStaticFiles で検出し null を返すため render は失敗しない (Phase 3-F asset gate)"
+        )
         return 0
     print(f"VOICEVOX engine OK (version: {info})")
 
@@ -177,11 +180,11 @@ def main():
         )
         return 6
 
-    out_path = Path(args.output)
+    out_path = _resolve_path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concat_wavs(chunk_paths, out_path)
     print(f"\nwrote: {out_path} ({out_path.stat().st_size} bytes)")
-    print(f"chunks: {len(chunk_paths)} / {len(chunks)} succeeded")
+    print(f"chunks succeeded: {len(chunk_paths)} / {len(chunks)} synthesized")
 
     if not args.keep_chunks:
         for p in chunk_paths:

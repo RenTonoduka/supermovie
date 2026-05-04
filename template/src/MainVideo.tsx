@@ -5,9 +5,7 @@ import { BGM } from './SoundEffects/BGM';
 import { ImageSequence } from './InsertImage';
 import { TitleSequence } from './Title';
 import { SlideSequence } from './Slides';
-// Phase 3-D NarrationAudio: voicevox_narration.py で public/narration.wav を生成した後に
-// 下記 import + <NarrationAudio /> のコメントアウトを外す。Video volume も 0 に切替。
-// import { NarrationAudio } from './Narration';
+import { NarrationAudio } from './Narration';
 import { VIDEO_FILE } from './videoConfig';
 
 export const MainVideo: React.FC = () => {
@@ -36,10 +34,10 @@ export const MainVideo: React.FC = () => {
       {/* タイトル */}
       <TitleSequence />
 
-      {/* ナレーション (Phase 3-D、public/narration.wav 生成後にコメントアウトを外す) */}
-      {/* <NarrationAudio volume={1.0} /> */}
+      {/* ナレーション (Phase 3-F asset gate、narration.wav 不在で null) */}
+      <NarrationAudio volume={1.0} />
 
-      {/* BGM */}
+      {/* BGM (Phase 3-F asset gate、bgm.mp3 不在で null) */}
       <BGM volume={0.08} />
 
       {/* 効果音 */}
