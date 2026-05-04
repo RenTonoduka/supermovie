@@ -7,12 +7,13 @@
 #   bash scripts/check_release_ready.sh
 #
 # Exit codes:
-#   0 = release-ready (全 gate pass、lint は node_modules 不在で skip 可)
+#   0 = release-ready (全 gate pass、optional gate は node_modules 不在で skip 可)
 #   1 = doc drift (regen --verify fail)
 #   2 = integration test fail
 #   3 = worktree dirty
 #   4 = unknown env (git / python3 不在)
 #   5 = npm run lint fail (node_modules 存在時のみ)
+#   6 = npm run test:react fail (node_modules + vitest 存在時のみ)
 #
 # 走らせる gate:
 #   1. git rev-parse / python3 / bash 環境チェック
@@ -21,6 +22,9 @@
 #   4. python3 template/scripts/test_timeline_integration.py
 #   5. (optional) cd template && npm run lint (Codex CODEX_GATE_VERIFY 推奨、
 #      node_modules 不在で skip)
+#   6. (optional) cd template && npm run test:react (Phase 3-S B5、useNarrationMode
+#      hook の watchStaticFile + invalidation 検証、vitest + jsdom + RTL、
+#      node_modules + vitest 不在で skip)
 #
 # 走らせない gate (実 project / 課金):
 #   - npm run visual-smoke (実 main.mp4 必要)
@@ -100,6 +104,27 @@ if [ -d "$REPO_DIR/template/node_modules" ] && [ -x "$REPO_DIR/template/node_mod
     fi
 else
     echo "  [SKIP] template/node_modules 不在、Roku 環境で npm install 後に再実行推奨"
+fi
+
+# 6. (optional) React component test (Phase 3-S B5)
+# vitest + jsdom + @testing-library/react で useNarrationMode hook 検証。
+# node_modules + vitest 不在で skip。
+echo
+echo "--- React component test (optional) ---"
+if [ -d "$REPO_DIR/template/node_modules" ] && [ -x "$REPO_DIR/template/node_modules/.bin/vitest" ]; then
+    REACT_LOG=$(mktemp)
+    if (cd "$REPO_DIR/template" && npm run test:react > "$REACT_LOG" 2>&1); then
+        PASS_LINE=$(grep -E "Tests +[0-9]+ passed" "$REACT_LOG" | tail -1 || echo "passed")
+        echo "  [OK]   $PASS_LINE"
+        rm -f "$REACT_LOG"
+    else
+        echo "  [FAIL] npm run test:react failed:"
+        tail -30 "$REACT_LOG" | sed 's/^/    /'
+        rm -f "$REACT_LOG"
+        exit 6
+    fi
+else
+    echo "  [SKIP] template/node_modules + vitest 不在、Roku 環境で npm install 後に再実行推奨"
 fi
 
 echo
