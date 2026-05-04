@@ -171,5 +171,6 @@ npm run test:timeline  # pure python integration smoke 単独 (engine 不要、C
 npm run visual-smoke   # 実 main.mp4 + node_modules 必要、3 format × 2 frame still
 ```
 
-`test:timeline` は 14 test ケースで timeline.py / 4 script の連鎖を engine 不要で
-高速検証 (新規 commit 後の regression 早期検出用)。
+`test:timeline` は **20 test ケース** (Phase 3-A〜3-O 累積、最新 aacc5dc 時点) で
+timeline.py / 4 script の連鎖を engine 不要で高速検証 (新規 commit 後の regression
+早期検出用)。test 一覧は `scripts/test_timeline_integration.py` の `main()` 末尾参照。
