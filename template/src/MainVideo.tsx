@@ -4,6 +4,7 @@ import { SESequence } from './SoundEffects/SESequence';
 import { BGM } from './SoundEffects/BGM';
 import { ImageSequence } from './InsertImage';
 import { TitleSequence } from './Title';
+import { SlideSequence } from './Slides';
 import { VIDEO_FILE } from './videoConfig';
 
 export const MainVideo: React.FC = () => {
@@ -19,6 +20,9 @@ export const MainVideo: React.FC = () => {
           objectFit: 'contain',
         }}
       />
+
+      {/* スライド (Phase 3-A、別レイヤーで動画の上に被せる) */}
+      <SlideSequence />
 
       {/* 挿入画像 */}
       <ImageSequence />
