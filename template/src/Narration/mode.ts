@@ -24,18 +24,29 @@ export type NarrationMode =
  * getStaticFiles() の結果を一度 Set 化して O(1) lookup
  * (Codex P3 #8 反映、毎 frame の some() 重複を防ぐ)。
  *
+ * Codex re-review 新規 P3 反映: module-level memo で 1 render 内の
+ * 重複呼出 (MainVideo + NarrationAudio が両方 call) を 1 回に集約。
+ * Remotion は 1 render で 1 JS context を使うため、context-fresh で
+ * 自然に memo が消える (Studio hot-reload 時も module 再評価で reset)。
+ *
  * 出典: https://www.remotion.dev/docs/getstaticfiles
  */
+let _modeCache: NarrationMode | undefined;
+
 export const getNarrationMode = (): NarrationMode => {
+  if (_modeCache !== undefined) {
+    return _modeCache;
+  }
   const names = new Set(getStaticFiles().map((f) => f.name));
   if (
     narrationData.length > 0 &&
     narrationData.every((seg) => names.has(seg.file))
   ) {
-    return { kind: 'chunks', segments: narrationData };
+    _modeCache = { kind: 'chunks', segments: narrationData };
+  } else if (names.has(NARRATION_LEGACY_FILE)) {
+    _modeCache = { kind: 'legacy', file: NARRATION_LEGACY_FILE };
+  } else {
+    _modeCache = { kind: 'none' };
   }
-  if (names.has(NARRATION_LEGACY_FILE)) {
-    return { kind: 'legacy', file: NARRATION_LEGACY_FILE };
-  }
-  return { kind: 'none' };
+  return _modeCache;
 };

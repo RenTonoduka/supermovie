@@ -69,20 +69,51 @@ EMPTY_NARRATION_DATA = (
 )
 
 
+def _tmp_path(path: Path) -> Path:
+    """`.{name}.{pid}.tmp` 形式の temp path を返す.
+
+    PID 付与で同一 project の同時実行による tmp 衝突を回避
+    (Codex Phase 3-H fix re-review 新規 P2 反映)。
+    """
+    return path.with_name(f".{path.name}.{os.getpid()}.tmp")
+
+
 def atomic_write_bytes(path: Path, data: bytes) -> None:
-    """tempfile + os.replace で atomic 書換 (Codex Phase 3-H review P2 #3 反映)。"""
+    """tempfile + os.replace で atomic 書換 (Codex Phase 3-H review P2 #3 反映).
+
+    write 中例外時は finally で tmp を unlink (Codex re-review 新規 P3 反映)。
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_bytes(data)
-    os.replace(tmp, path)
+    tmp = _tmp_path(path)
+    try:
+        tmp.write_bytes(data)
+        os.replace(tmp, path)
+    except Exception:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        raise
 
 
 def atomic_write_text(path: Path, content: str) -> None:
-    """tempfile + os.replace で atomic 書換 (Codex Phase 3-H review P2 #3 反映)。"""
+    """tempfile + os.replace で atomic 書換 (Codex Phase 3-H review P2 #3 反映).
+
+    write 中例外時は finally で tmp を unlink (Codex re-review 新規 P3 反映)。
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(content, encoding="utf-8")
-    os.replace(tmp, path)
+    tmp = _tmp_path(path)
+    try:
+        tmp.write_text(content, encoding="utf-8")
+        os.replace(tmp, path)
+    except Exception:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        raise
 
 
 def load_json(p: Path):
@@ -126,26 +157,35 @@ def concat_wavs_atomic(wavs: list[Path], out_path: Path) -> None:
     """同一 sample rate / channel の wav 列を時系列で結合し atomic に書く.
 
     wave.Error は呼び出し側で catch して all-or-nothing rollback する
-    (Codex Phase 3-H review P2 #6 反映)。
+    (Codex Phase 3-H review P2 #6 反映). write 中例外時は finally で tmp を
+    unlink して残骸を残さない (Codex re-review 新規 P3 反映)。
     """
     if not wavs:
         return
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out_path.with_name(f".{out_path.name}.tmp")
-    with wave.open(str(wavs[0]), "rb") as w0:
-        params = w0.getparams()
-        frames = [w0.readframes(w0.getnframes())]
-    for p in wavs[1:]:
-        with wave.open(str(p), "rb") as w:
-            if (w.getframerate(), w.getnchannels(), w.getsampwidth()) != (params.framerate, params.nchannels, params.sampwidth):
-                print(f"WARN: {p.name} format mismatch、skip", file=sys.stderr)
-                continue
-            frames.append(w.readframes(w.getnframes()))
-    with wave.open(str(tmp), "wb") as out:
-        out.setparams(params)
-        for f in frames:
-            out.writeframes(f)
-    os.replace(tmp, out_path)
+    tmp = _tmp_path(out_path)
+    try:
+        with wave.open(str(wavs[0]), "rb") as w0:
+            params = w0.getparams()
+            frames = [w0.readframes(w0.getnframes())]
+        for p in wavs[1:]:
+            with wave.open(str(p), "rb") as w:
+                if (w.getframerate(), w.getnchannels(), w.getsampwidth()) != (params.framerate, params.nchannels, params.sampwidth):
+                    print(f"WARN: {p.name} format mismatch、skip", file=sys.stderr)
+                    continue
+                frames.append(w.readframes(w.getnframes()))
+        with wave.open(str(tmp), "wb") as out:
+            out.setparams(params)
+            for f in frames:
+                out.writeframes(f)
+        os.replace(tmp, out_path)
+    except Exception:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        raise
 
 
 def measure_duration_seconds(wav_path: Path) -> float:
@@ -157,11 +197,20 @@ def measure_duration_seconds(wav_path: Path) -> float:
         return w.getnframes() / float(w.getframerate())
 
 
+class StaleCleanupError(RuntimeError):
+    """cleanup_stale_all() で legacy narration.wav の削除に失敗した時に raise."""
+
+
 def cleanup_stale_all() -> None:
     """旧 chunk_*.wav / chunk_meta.json / narration.wav / narrationData.ts を全 reset.
 
     Codex Phase 3-H review P1 #2 反映: 旧 narration.wav が残ると partial failure 後に
     legacy mode で stale narration が再生される事故を起こすため、必ず全削除する。
+
+    Codex re-review P1 #2 partial 反映: legacy wav の削除失敗は WARN ではなく
+    StaleCleanupError raise (削除失敗を黙過すると残置 → mode helper が legacy
+    経路に入り、stale narration を再生してしまう)。chunks / chunk_meta は
+    どうせ atomic で上書きされるため WARN 継続で OK。
     """
     if NARRATION_DIR.exists():
         for p in NARRATION_DIR.glob("chunk_*.wav"):
@@ -178,7 +227,9 @@ def cleanup_stale_all() -> None:
         try:
             NARRATION_LEGACY_WAV.unlink()
         except OSError as e:
-            print(f"WARN: stale narration.wav 削除失敗: {e}", file=sys.stderr)
+            raise StaleCleanupError(
+                f"stale narration.wav 削除失敗、stale legacy 再生事故防止のため処理中断: {e}"
+            ) from e
     reset_narration_data_ts()
 
 
@@ -350,7 +401,11 @@ def main():
 
     # Phase 3-H: stale narration を全 reset BEFORE synthesis
     # (chunk wav / chunk_meta.json / narration.wav / narrationData.ts 全部、Codex P1 #2)
-    cleanup_stale_all()
+    try:
+        cleanup_stale_all()
+    except StaleCleanupError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 7
     NARRATION_DIR.mkdir(parents=True, exist_ok=True)
 
     chunk_paths: list[Path] = []

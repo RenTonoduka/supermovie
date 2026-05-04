@@ -66,10 +66,14 @@ Roku が以下のいずれかで起動した後に実行:
 - partial failure (途中 chunk synthesis 失敗) 時は `narrationData.ts` を空 array に
   reset + 部分 chunk を削除 (二重音声 / 中途半端 timeline 防止)
 
-FPS は `--fps` 引数 → `<PROJECT>/project-config.json` の `source.fps.render_fps` →
-default 30 の優先順位で解決。
+FPS は `--fps` 引数 → `<PROJECT>/src/videoConfig.ts` の `export const FPS = N;` →
+default 30 の優先順位で解決 (Codex Phase 3-H review P2 #4 + P2 #5: Remotion
+が videoConfig.FPS を使う一方で script が project-config.json を読むと両者
+ズレるため、videoConfig.ts を一次 source に統一)。`--fps <= 0` は exit 4。
 
-stale chunk (前回実行の遺物) は synthesis 開始前に必ず cleanup。
+stale chunk + 旧 narration.wav (前回実行の遺物) は synthesis 開始前に必ず
+cleanup。legacy `narration.wav` の削除失敗は exit 7 (StaleCleanupError、stale
+legacy 再生事故防止)。
 
 ## Phase 4: Remotion 接合 (asset gate、手動操作不要)
 
@@ -88,10 +92,14 @@ Phase 3-F asset gate + Phase 3-H per-segment Sequence により
 に切り替わる。Roku の手作業ゼロ。
 
 実装参照:
-- `template/src/MainVideo.tsx` (`hasLegacyNarration` + `hasChunkNarration` で `baseVolume` 判定)
-- `template/src/Narration/NarrationAudio.tsx` (narrationData / legacy / null の三経路 fallback)
+- `template/src/Narration/mode.ts` (`getNarrationMode()`: chunks / legacy / none の
+  三経路を Set lookup + module-level memo で判定する一元 helper)
+- `template/src/MainVideo.tsx` (mode helper 経由で `baseVolume` 判定、
+  `none` だけ `volume=1.0`、それ以外は `0`)
+- `template/src/Narration/NarrationAudio.tsx` (mode helper 経由で
+  `<Sequence>` ループ / 単一 `<Audio>` / `null` を返す)
 - `template/src/Narration/types.ts` (NarrationSegment 型)
-- `template/src/Narration/narrationData.ts` (script が all-or-nothing で書換)
+- `template/src/Narration/narrationData.ts` (script が all-or-nothing + atomic で書換)
 
 ## 実行コマンド
 
@@ -129,6 +137,7 @@ python3 <PROJECT>/scripts/voicevox_narration.py --require-engine
 | partial chunk failure (--allow-partial なし) | exit 6、部分 chunk + 旧 narration.wav 全削除、narrationData.ts 空 array (all-or-nothing) |
 | WAV header 解析失敗 (wave.Error / EOFError) | exit 6、chunk + narration.wav 削除 (Codex Phase 3-H review P2 #6) |
 | FPS 不正 (--fps <= 0 / videoConfig.ts FPS regex 失敗) | exit 4 (前者) or default 30 fallback (後者) |
+| stale narration.wav 削除失敗 (StaleCleanupError) | exit 7 (Codex Phase 3-H re-review P1 #2 partial 反映、stale legacy 再生事故防止) |
 
 ## 連携マップ
 
