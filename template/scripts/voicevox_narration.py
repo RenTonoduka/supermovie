@@ -263,34 +263,141 @@ def read_video_config_fps(default: int = DEFAULT_FPS) -> int:
     return fps if fps > 0 else default
 
 
+VAD_RESULT = PROJ / "vad_result.json"
+
+
+def build_cut_segments_from_vad(vad: dict | None, fps: int) -> list[dict]:
+    """vad_result.json の speech_segments[] から cut 後 timeline mapping を構築.
+
+    build_slide_data.py の同名関数と同型 (Codex Phase 3-I review 重点で
+    一次 source 共有)。fps は voicevox_narration 側の videoConfig.FPS を渡す。
+    """
+    if not vad or "speech_segments" not in vad:
+        return []
+    out = []
+    cursor_ms = 0
+    for i, seg in enumerate(vad["speech_segments"]):
+        s_ms = seg["start"]
+        e_ms = seg["end"]
+        dur_ms = e_ms - s_ms
+        out.append({
+            "id": i + 1,
+            "originalStartMs": s_ms,
+            "originalEndMs": e_ms,
+            "playbackStart": round(cursor_ms / 1000 * fps),
+            "playbackEnd": round((cursor_ms + dur_ms) / 1000 * fps),
+        })
+        cursor_ms += dur_ms
+    return out
+
+
+def ms_to_playback_frame(ms: int, fps: int, cut_segments: list[dict]) -> int | None:
+    """元動画の ms を playback frame に変換 (cut-aware).
+
+    cut_segments が空なら直接変換。ms が cut 範囲外 (cut で除外された箇所) は
+    None を返す (呼出側が累積 fallback)。
+    """
+    if not cut_segments:
+        return round(ms / 1000 * fps)
+    for cs in cut_segments:
+        if cs["originalStartMs"] <= ms <= cs["originalEndMs"]:
+            offset_ms = ms - cs["originalStartMs"]
+            return cs["playbackStart"] + round(offset_ms / 1000 * fps)
+    return None
+
+
+def load_cut_segments(fps: int) -> list[dict]:
+    """vad_result.json から cut_segments を構築. 不在/壊れていれば []."""
+    if not VAD_RESULT.exists():
+        return []
+    try:
+        return build_cut_segments_from_vad(load_json(VAD_RESULT), fps)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"WARN: vad_result.json 読込失敗、cut-aware mapping skip: {e}", file=sys.stderr)
+        return []
+
+
 def write_narration_data(
-    chunks: list[tuple[Path, str]],
+    chunks: list[tuple[Path, str, int | None, int | None]],
     fps: int,
+    cut_segments: list[dict],
 ) -> tuple[list[dict], Path, Path]:
     """各 chunk の duration を測って narrationData.ts と chunk_meta.json を書く.
 
     両方とも atomic 書換 (Codex P2 #3 反映)。wave.Error は呼び出し側で catch。
+    Phase 3-I: chunks tuple は (path, text, sourceStartMs, sourceEndMs)。
+    sourceStartMs があれば transcript timing alignment、なければ累積 fallback。
+    cut_segments があれば cut-aware mapping、cut で除外された ms は累積 fallback。
     """
     segments: list[dict] = []
     cumulative_frame = 0
-    for i, (path, text) in enumerate(chunks):
+    overlap_warns: list[str] = []
+    for i, (path, text, source_start_ms, source_end_ms) in enumerate(chunks):
         duration_sec = measure_duration_seconds(path)
         duration_frames = max(1, round(duration_sec * fps))
         rel = path.relative_to(PROJ / "public").as_posix()
-        segments.append({
+
+        # startFrame: transcript timing > 累積 fallback
+        start_frame = cumulative_frame
+        timing_source = "cumulative"
+        if source_start_ms is not None:
+            mapped = ms_to_playback_frame(source_start_ms, fps, cut_segments)
+            if mapped is None:
+                print(
+                    f"WARN: chunk {i} sourceStartMs={source_start_ms}ms は cut 範囲外、"
+                    f"累積 frame={cumulative_frame} で fallback",
+                    file=sys.stderr,
+                )
+            else:
+                start_frame = mapped
+                timing_source = "transcript_aligned"
+
+        # overlap 検出 (前 chunk の終端 > 現 startFrame)
+        if segments:
+            prev = segments[-1]
+            prev_end = prev["startFrame"] + prev["durationInFrames"]
+            if prev_end > start_frame:
+                overlap_warns.append(
+                    f"chunk {i - 1}->{i}: prev end frame={prev_end} > start={start_frame} "
+                    f"({prev_end - start_frame} frames overlap)"
+                )
+
+        seg_dict: dict = {
             "id": i,
-            "startFrame": cumulative_frame,
+            "startFrame": start_frame,
             "durationInFrames": duration_frames,
             "file": rel,
             "text": text[:100],  # debug 用、長文は切り詰め
             "duration_sec": round(duration_sec, 3),
-        })
-        cumulative_frame += duration_frames
+            "timing_source": timing_source,
+        }
+        if source_start_ms is not None:
+            seg_dict["sourceStartMs"] = source_start_ms
+        if source_end_ms is not None:
+            seg_dict["sourceEndMs"] = source_end_ms
+        segments.append(seg_dict)
+        cumulative_frame = start_frame + duration_frames
 
+    if overlap_warns:
+        print(
+            f"WARN: {len(overlap_warns)} narration overlap(s) detected "
+            f"(<Sequence> 重複で二重再生になる、--allow-partial や transcript 再分割を検討):",
+            file=sys.stderr,
+        )
+        for w in overlap_warns:
+            print(f"  - {w}", file=sys.stderr)
+
+    total_frames = max((s["startFrame"] + s["durationInFrames"] for s in segments), default=0)
     atomic_write_text(
         CHUNK_META_JSON,
         json.dumps(
-            {"fps": fps, "total_frames": cumulative_frame, "segments": segments},
+            {
+                "fps": fps,
+                "total_frames": total_frames,
+                "cut_aware": bool(cut_segments),
+                "overlaps": overlap_warns,
+                "segments": segments,
+            },
             ensure_ascii=False,
             indent=2,
         ),
@@ -307,15 +414,18 @@ def write_narration_data(
         "export const narrationData: NarrationSegment[] = [",
     ]
     for s in segments:
-        ts_lines.append(
-            "  { "
-            f"id: {s['id']}, "
-            f"startFrame: {s['startFrame']}, "
-            f"durationInFrames: {s['durationInFrames']}, "
-            f"file: {json.dumps(s['file'])}, "
-            f"text: {json.dumps(s['text'], ensure_ascii=False)} "
-            "},"
-        )
+        parts = [
+            f"id: {s['id']}",
+            f"startFrame: {s['startFrame']}",
+            f"durationInFrames: {s['durationInFrames']}",
+            f"file: {json.dumps(s['file'])}",
+            f"text: {json.dumps(s['text'], ensure_ascii=False)}",
+        ]
+        if "sourceStartMs" in s:
+            parts.append(f"sourceStartMs: {s['sourceStartMs']}")
+        if "sourceEndMs" in s:
+            parts.append(f"sourceEndMs: {s['sourceEndMs']}")
+        ts_lines.append("  { " + ", ".join(parts) + " },")
     ts_lines.append("];")
     ts_lines.append("")
     atomic_write_text(NARRATION_DATA_TS, "\n".join(ts_lines))
@@ -329,14 +439,40 @@ def _resolve_path(path_str: str) -> Path:
     return p if p.is_absolute() else PROJ / p
 
 
-def collect_chunks(args, transcript: dict) -> list[str]:
+def collect_chunks(args, transcript: dict) -> list[dict]:
+    """各 chunk を {text, sourceStartMs, sourceEndMs} で返す.
+
+    Phase 3-I: transcript_fixed.json の segments[].start/end を保持して、
+    write_narration_data 側で transcript timing alignment できるようにする。
+    --script は 1 行 1 chunk で timing なし、--script-json は startMs/endMs
+    optional で受け付ける。
+    """
     if args.script:
         text = _resolve_path(args.script).read_text(encoding="utf-8")
-        return [line.strip() for line in text.splitlines() if line.strip()]
+        return [
+            {"text": line.strip(), "sourceStartMs": None, "sourceEndMs": None}
+            for line in text.splitlines() if line.strip()
+        ]
     if args.script_json:
         plan = load_json(_resolve_path(args.script_json))
-        return [s.get("text", "").strip() for s in plan.get("segments", []) if s.get("text", "").strip()]
-    return [s.get("text", "").strip() for s in transcript.get("segments", []) if s.get("text", "").strip()]
+        return [
+            {
+                "text": s.get("text", "").strip(),
+                "sourceStartMs": s.get("startMs"),
+                "sourceEndMs": s.get("endMs"),
+            }
+            for s in plan.get("segments", [])
+            if s.get("text", "").strip()
+        ]
+    return [
+        {
+            "text": s.get("text", "").strip(),
+            "sourceStartMs": s.get("start"),
+            "sourceEndMs": s.get("end"),
+        }
+        for s in transcript.get("segments", [])
+        if s.get("text", "").strip()
+    ]
 
 
 def main():
@@ -409,8 +545,9 @@ def main():
     NARRATION_DIR.mkdir(parents=True, exist_ok=True)
 
     chunk_paths: list[Path] = []
-    chunk_texts: list[str] = []
-    for i, text in enumerate(chunks):
+    chunk_meta: list[tuple[str, int | None, int | None]] = []  # (text, sourceStartMs, sourceEndMs)
+    for i, ch in enumerate(chunks):
+        text = ch["text"]
         try:
             wav_bytes = synthesize(text, args.speaker)
         except (urllib.error.HTTPError, urllib.error.URLError) as e:
@@ -419,7 +556,7 @@ def main():
         p = NARRATION_DIR / f"chunk_{i:03d}.wav"
         atomic_write_bytes(p, wav_bytes)
         chunk_paths.append(p)
-        chunk_texts.append(text)
+        chunk_meta.append((text, ch.get("sourceStartMs"), ch.get("sourceEndMs")))
         print(f"  chunk[{i:3}] {len(wav_bytes)} bytes  text='{text[:30]}…'")
 
     if not chunk_paths:
@@ -454,10 +591,16 @@ def main():
     print(f"\nwrote: {out_path} ({out_path.stat().st_size} bytes)")
     print(f"chunks succeeded: {len(chunk_paths)} / {len(chunks)} synthesized")
 
-    # Phase 3-H: chunk metadata + narrationData.ts (atomic、最後に書く)
-    pairs = list(zip(chunk_paths, chunk_texts))
+    # Phase 3-H/I: chunk metadata + narrationData.ts (atomic、最後に書く)
+    cut_segments = load_cut_segments(fps)
+    if cut_segments:
+        print(f"cut-aware mapping: {len(cut_segments)} cut segments loaded from vad_result.json")
+    pairs = [
+        (path, text, source_start, source_end)
+        for path, (text, source_start, source_end) in zip(chunk_paths, chunk_meta)
+    ]
     try:
-        segments, ts_path, meta_path = write_narration_data(pairs, fps)
+        segments, ts_path, meta_path = write_narration_data(pairs, fps, cut_segments)
     except (wave.Error, EOFError) as e:
         print(f"ERROR: WAV duration probe failed (wave.Error / EOFError): {e}", file=sys.stderr)
         # narrationData/meta は temp 書き出しなので残らない、chunks は残るが atomic 失敗
@@ -473,7 +616,10 @@ def main():
             except OSError:
                 pass
         return 6
-    print(f"wrote: {ts_path} ({len(segments)} segments, {sum(s['durationInFrames'] for s in segments)} frames)")
+    total_frames = max(
+        (s["startFrame"] + s["durationInFrames"] for s in segments), default=0
+    )
+    print(f"wrote: {ts_path} ({len(segments)} segments, total_frames={total_frames})")
     print(f"wrote: {meta_path}")
 
     summary = {
@@ -481,7 +627,11 @@ def main():
         "fps": fps,
         "chunks": len(chunk_paths),
         "total_chunks": len(chunks),
-        "total_frames": sum(s["durationInFrames"] for s in segments),
+        "total_frames": total_frames,
+        "cut_aware": bool(cut_segments),
+        "transcript_aligned_count": sum(
+            1 for s in segments if s.get("timing_source") == "transcript_aligned"
+        ),
         "narration_wav": str(out_path),
         "narration_data_ts": str(ts_path),
         "chunk_meta_json": str(meta_path),

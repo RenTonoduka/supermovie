@@ -61,10 +61,25 @@ Roku が以下のいずれかで起動した後に実行:
 - `public/narration/chunk_NNN.wav` を保持 (削除しない)
 - 各 chunk の wave header から実 duration 測定 → frame 換算
 - `src/Narration/narrationData.ts` を all-or-nothing で生成
-  (NarrationSegment[]: id / startFrame / durationInFrames / file / text)
-- `public/narration/chunk_meta.json` に fps + total_frames + segments[] を debug 出力
+  (NarrationSegment[]: id / startFrame / durationInFrames / file / text /
+   sourceStartMs / sourceEndMs)
+- `public/narration/chunk_meta.json` に fps + total_frames + cut_aware +
+  overlaps + segments[] を debug 出力
 - partial failure (途中 chunk synthesis 失敗) 時は `narrationData.ts` を空 array に
   reset + 部分 chunk を削除 (二重音声 / 中途半端 timeline 防止)
+
+**Phase 3-I transcript timing alignment** (default、自動):
+- transcript_fixed.json segments[].start/end を chunk metadata に保持
+- `startFrame` を transcript start_ms から videoConfig.FPS で frame 化
+  (旧 Phase 3-H は単純 chunk duration 累積で transcript timing と無関係だった)
+- `vad_result.json` がある時は cut-aware mapping (build_slide_data.py の
+  `ms_to_playback_frame` と同型関数を内蔵)
+- cut で除外された ms 範囲 → 累積 frame fallback + WARN
+- 隣接 chunk の overlap (前 chunk 終端 > 現 startFrame) を検出して WARN
+  (chunk_meta.json の `overlaps[]` にも記録、render では `<Sequence>` 重複で
+  二重再生になり得るため transcript 再分割や `--allow-partial` 検討の signal)
+- `--script` (timing なし) / `--script-json` (startMs/endMs optional) は
+  累積 fallback で Phase 3-H 互換挙動を維持
 
 FPS は `--fps` 引数 → `<PROJECT>/src/videoConfig.ts` の `export const FPS = N;` →
 default 30 の優先順位で解決 (Codex Phase 3-H review P2 #4 + P2 #5: Remotion
