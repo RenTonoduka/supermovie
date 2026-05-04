@@ -282,19 +282,21 @@ def test_voicevox_collect_chunks_validation() -> None:
 
 
 def test_voicevox_write_order_narrationdata_before_wav() -> None:
-    """Phase 3-N race fix: write 順序 chunks → narrationData.ts → narration.wav.
+    """Phase 3-N race fix regression: write 順序 narrationData.ts → narration.wav.
 
     旧順序 (narration.wav 先) では Studio hot-reload で legacy 経路に一瞬流れる
-    race があった。新順序を保証するため、write_narration_data の出力存在 +
-    narration.wav が後で出る順序を直接 mock せずに、`write_narration_data` が
-    呼ばれる前に concat_wavs_atomic が呼ばれていないことを `inspect` 経由で
-    確認するのは難しいため、本 test では「全成果物が atomic 書換」を verify。
+    race があった (Codex CODEX_REVIEW_PHASE3N_AND_3O P2 #1)。新順序を保証する
+    ため、本 test は call order を直接 verify する:
 
-    Codex Phase 3-N review P2 #1 race fix の regression test。
+    1. main() を temp project + module-level state monkey-patch で実行
+    2. concat_wavs_atomic を「narrationData.ts 存在を assert する mock」で
+       置換、call 時点で narrationData.ts populated でないなら raise
+    3. 旧順序に戻れば assert で必ず落ちる
+
+    Codex Phase 3-O fix re-review P2 #2 反映 (旧 test は逆順でも通る)。
     """
     import voicevox_narration as vn
 
-    # Module-level state 全 save (Codex Phase 3-L re-review P3 #2 反映)
     state = {
         "PROJ": vn.PROJ,
         "NARRATION_DIR": vn.NARRATION_DIR,
@@ -302,6 +304,9 @@ def test_voicevox_write_order_narrationdata_before_wav() -> None:
         "CHUNK_META_JSON": vn.CHUNK_META_JSON,
         "NARRATION_LEGACY_WAV": vn.NARRATION_LEGACY_WAV,
     }
+    original_concat = vn.concat_wavs_atomic
+    original_check_engine = vn.check_engine
+    original_synthesize = vn.synthesize
 
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -311,30 +316,87 @@ def test_voicevox_write_order_narrationdata_before_wav() -> None:
             vn.NARRATION_DATA_TS = proj / "src" / "Narration" / "narrationData.ts"
             vn.CHUNK_META_JSON = vn.NARRATION_DIR / "chunk_meta.json"
             vn.NARRATION_LEGACY_WAV = proj / "public" / "narration.wav"
-            vn.NARRATION_DIR.mkdir(parents=True)
-            vn.NARRATION_DATA_TS.parent.mkdir(parents=True)
+            (proj / "src" / "Narration").mkdir(parents=True)
+            (proj / "src" / "videoConfig.ts").write_text(
+                make_videoconfig_ts(30), encoding="utf-8"
+            )
+            # transcript で 1 chunk 用意
+            (proj / "transcript_fixed.json").write_text(
+                json.dumps(
+                    {"segments": [{"text": "hi", "start": 0, "end": 1000}]}
+                ),
+                encoding="utf-8",
+            )
 
-            write_synthetic_wav(vn.NARRATION_DIR / "chunk_000.wav", 1.0)
+            # engine OK + synthesize stub (synthetic 22050Hz mono WAV bytes)
+            import wave
+            import io
 
-            # write_narration_data → narration.wav の順を再現するため、
-            # main() 全体は実行せず write_narration_data 単体 + 模擬 concat。
-            chunks_data = [(vn.NARRATION_DIR / "chunk_000.wav", "test", 0, 1000)]
-            segments, ts_path, meta_path = vn.write_narration_data(chunks_data, 30, [])
-            # narrationData.ts と meta が atomic 書換で配置されている
-            if not ts_path.exists():
-                raise AssertionError("narrationData.ts not created")
-            if not meta_path.exists():
-                raise AssertionError("chunk_meta.json not created")
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(22050)
+                import struct
+                w.writeframes(struct.pack("<22050h", *([0] * 22050)))
+            wav_bytes = buf.getvalue()
 
-            # narration.wav は本 test では別途呼ばないが、reset_narration_data_ts が
-            # 動作することを確認 (rollback path、Codex P2 #1 race fix の rollback 部分)
-            vn.reset_narration_data_ts()
+            vn.check_engine = lambda: (True, "0.0.0-test")
+            vn.synthesize = lambda text, speaker: wav_bytes
+
+            # concat_wavs_atomic を「narrationData.ts populated を assert + raise」に
+            order_check_log = []
+
+            def assert_concat_after_narrationdata(wavs, out_path):
+                # narrationData.ts 存在 + 空 array でないことを確認
+                if not vn.NARRATION_DATA_TS.exists():
+                    order_check_log.append("FAIL: narrationData.ts not created before concat")
+                    raise RuntimeError("write order regression: narrationData.ts missing")
+                content = vn.NARRATION_DATA_TS.read_text(encoding="utf-8")
+                if "narration/chunk_000.wav" not in content:
+                    order_check_log.append(
+                        f"FAIL: narrationData.ts not populated before concat: {content[:100]}"
+                    )
+                    raise RuntimeError("write order regression: narrationData.ts empty")
+                order_check_log.append("OK: narrationData.ts populated before concat")
+                # 失敗を演じて rollback path を起動 (P1 fix の Exception catch)
+                raise PermissionError("simulated permission error")
+
+            vn.concat_wavs_atomic = assert_concat_after_narrationdata
+
+            # main() を実行、concat で失敗 → exit 6 期待
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["voicevox_narration.py"]
+            try:
+                ret = vn.main()
+            finally:
+                _sys.argv = old_argv
+
+            # call order assertion
+            if not order_check_log:
+                raise AssertionError("concat mock not invoked (main() flow regression)")
+            if "OK:" not in order_check_log[0]:
+                raise AssertionError(
+                    f"write order regression detected: {order_check_log}"
+                )
+            # exit code: rollback path の return 6 を期待 (Codex P1 fix が動作)
+            assert_eq(ret, 6, "concat failure → exit 6 (P1 rollback)")
+            # rollback 後: narrationData.ts は empty に戻り、chunks 削除済み
             content = vn.NARRATION_DATA_TS.read_text(encoding="utf-8")
             if "export const narrationData: NarrationSegment[] = []" not in content:
-                raise AssertionError("reset_narration_data_ts did not empty narrationData")
+                raise AssertionError(
+                    f"rollback failed: narrationData.ts not empty: {content[:100]}"
+                )
+            chunk_files = list(vn.NARRATION_DIR.glob("chunk_*.wav"))
+            if chunk_files:
+                raise AssertionError(f"rollback failed: chunks left: {chunk_files}")
     finally:
         for k, v in state.items():
             setattr(vn, k, v)
+        vn.concat_wavs_atomic = original_concat
+        vn.check_engine = original_check_engine
+        vn.synthesize = original_synthesize
 
 
 def test_voicevox_write_narration_data_alignment() -> None:

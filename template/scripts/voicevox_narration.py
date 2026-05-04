@@ -630,11 +630,15 @@ def main():
     # Phase 3-N race fix: narrationData.ts を書いた後で narration.wav を書く
     # (これで Studio hot-reload で chunks 経路が先に成立、legacy fallback が
     # 一瞬鳴る race を解消)。
+    # Codex Phase 3-O fix re-review P1 反映: rollback catch を Exception 全部に
+    # 拡張 (旧 wave.Error / EOFError 限定だと os.replace / OSError / 権限 /
+    # disk full で narrationData.ts populated + chunks 残置、all-or-nothing 破れ)。
+    # KeyboardInterrupt は BaseException 系で捕まえない (ユーザ Ctrl+C 尊重)。
     out_path = _resolve_path(args.output)
     try:
         concat_wavs_atomic(chunk_paths, out_path)
-    except (wave.Error, EOFError) as e:
-        print(f"ERROR: WAV concat failed (wave.Error / EOFError): {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"ERROR: narration.wav concat failed: {type(e).__name__}: {e}", file=sys.stderr)
         # narrationData.ts と chunks を rollback (all-or-nothing 維持)
         for p in chunk_paths:
             try:
@@ -642,7 +646,10 @@ def main():
             except OSError:
                 pass
         # narrationData.ts を空 array に戻す (cleanup_stale_all 同等の reset)
-        reset_narration_data_ts()
+        try:
+            reset_narration_data_ts()
+        except OSError:
+            pass
         if CHUNK_META_JSON.exists():
             try:
                 CHUNK_META_JSON.unlink()
