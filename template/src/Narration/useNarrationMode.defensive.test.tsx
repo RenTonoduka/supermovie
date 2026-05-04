@@ -24,6 +24,8 @@ const mockState = {
 };
 
 vi.mock('remotion', () => {
+  // 引数は mock 内で使わないが signature 互換のため受け取る
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const watchStaticFile = (name: string, callback: () => void) => {
     if (mockState.shouldThrow) {
       throw new Error('Simulated watchStaticFile failure');
