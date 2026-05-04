@@ -86,10 +86,16 @@ template/
 │   └── InsertImage/                ← 画像挿入
 └── public/
     ├── main.mp4                    ← ベース動画
+    ├── narration.wav               ← VOICEVOX 生成 (asset gate、不在 OK)
     ├── se/                         ← 効果音素材
-    ├── BGM/                        ← BGM素材
+    ├── BGM/
+    │   └── bgm.mp3                 ← BGM 本体 (asset gate、不在 OK)
     └── images/                     ← 挿入画像
 ```
+
+**asset gate**: `narration.wav` / `BGM/bgm.mp3` は `getStaticFiles()` で
+有無検出。不在なら該当 layer は null を返して render 失敗しない。
+narration.wav 存在時は base 動画の元音声が自動 mute される (二重音声防止)。
 
 ## テロップスタイル一覧
 

@@ -246,7 +246,8 @@ type SoundEffect = {
 | 動画設定（SSoT） | `<PROJECT>/src/videoConfig.ts` |
 | ベース動画 | `<PROJECT>/public/main.mp4` |
 | SE素材 | `<PROJECT>/public/se/` |
-| BGM素材 | `<PROJECT>/public/BGM/` |
+| BGM 本体 (asset gate) | `<PROJECT>/public/BGM/bgm.mp3` |
+| ナレーション本体 (asset gate) | `<PROJECT>/public/narration.wav` |
 | 挿入画像（手動配置） | `<PROJECT>/public/images/` |
 | 挿入画像（AI生成） | `<PROJECT>/public/images/generated/` |
 | Python仮想環境 | `<PROJECT>/.venv/` |

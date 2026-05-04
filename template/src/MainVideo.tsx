@@ -1,4 +1,4 @@
-import { AbsoluteFill, Video, staticFile } from 'remotion';
+import { AbsoluteFill, Video, getStaticFiles, staticFile } from 'remotion';
 import { TelopPlayer } from './テロップテンプレート';
 import { SESequence } from './SoundEffects/SESequence';
 import { BGM } from './SoundEffects/BGM';
@@ -8,13 +8,21 @@ import { SlideSequence } from './Slides';
 import { NarrationAudio } from './Narration';
 import { VIDEO_FILE } from './videoConfig';
 
+const NARRATION_FILE = 'narration.wav';
+
 export const MainVideo: React.FC = () => {
+  // Phase 3-F asset gate と連動: narration.wav が存在すれば base 元音声を mute、
+  // 不在なら 1.0 で再生 (二重音声防止)。getStaticFiles は public/ 配下を返す
+  // Remotion 公式 API (https://www.remotion.dev/docs/get-static-files)。
+  const hasNarration = getStaticFiles().some((f) => f.name === NARRATION_FILE);
+  const baseVolume = hasNarration ? 0 : 1.0;
+
   return (
     <AbsoluteFill style={{ backgroundColor: 'black' }}>
-      {/* ベース動画 (narration 有効時は volume={0} に変更) */}
+      {/* ベース動画 (narration.wav 存在時は自動 mute) */}
       <Video
         src={staticFile(VIDEO_FILE)}
-        volume={1.0}
+        volume={() => baseVolume}
         style={{
           width: '100%',
           height: '100%',

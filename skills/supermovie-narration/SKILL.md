@@ -58,17 +58,24 @@ Roku が以下のいずれかで起動した後に実行:
 すべての chunk wav を時系列で結合し `public/narration.wav` を生成。
 `--keep-chunks` で chunk 個別 wav も保持 (debug)。
 
-## Phase 4: Remotion 接合
+## Phase 4: Remotion 接合 (asset gate、手動操作不要)
 
-`template/src/Narration/NarrationAudio.tsx` を `MainVideo.tsx` に追加。
-narration.wav が存在する時のみコメントアウトを外す:
+Phase 3-F asset gate により `MainVideo.tsx` 編集は不要。
+`<NarrationAudio />` と base `<Video>` の両方が `getStaticFiles()` で
+`public/narration.wav` の有無を検出する:
 
-```tsx
-// Phase 3-D scaffold: 生成後に以下を有効化
-import { NarrationAudio } from './Narration';
-// <Video ... volume={0} />  ← base 元音声 mute
-// <NarrationAudio volume={1.0} />  ← narration 再生
-```
+| narration.wav 状態 | NarrationAudio | base Video volume |
+|--------------------|----------------|-------------------|
+| 不在 | null (skip) | 1.0 (元音声再生) |
+| 存在 | `<Audio>` 再生 | 0 (mute、二重音声防止) |
+
+つまり `voicevox_narration.py` 成功 → `public/narration.wav` 出力 →
+次回 `npm run dev` / `npm run render` で自動的に narration 再生 + base mute に
+切り替わる。Roku の手作業ゼロ。
+
+実装参照:
+- `template/src/MainVideo.tsx` (`hasNarration` 判定 + `baseVolume`)
+- `template/src/Narration/NarrationAudio.tsx` (asset gate null フォールバック)
 
 ## 実行コマンド
 
