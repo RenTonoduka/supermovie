@@ -27,9 +27,11 @@ from pathlib import Path
 PROJ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from timeline import (  # noqa: E402
+    TranscriptSegmentError,
     build_cut_segments_from_vad as _bcs_raw,
     ms_to_playback_frame as _msf_raw,
     read_video_config_fps,
+    validate_transcript_segment,
     validate_vad_schema,
 )
 
@@ -322,6 +324,15 @@ def main():
     tone = config.get("tone", "プロフェッショナル")
     segments = transcript.get("segments", [])
     words = transcript.get("words", [])
+
+    # Phase 3-K (Codex Phase 3-I review P2 #3 拡張): build_slide_data でも
+    # transcript の壊れたデータを早期検出 (start>end / 型不正)。voicevox_narration
+    # と同じ validate_transcript_segment を経由。
+    for i, seg in enumerate(segments):
+        try:
+            validate_transcript_segment(seg, idx=i)
+        except TranscriptSegmentError as e:
+            raise SystemExit(f"transcript validation failed: {e}")
 
     vad_path = PROJ / "vad_result.json"
     vad = load_json(vad_path) if vad_path.exists() else None

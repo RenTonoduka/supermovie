@@ -30,7 +30,11 @@ from pathlib import Path
 PROJ = Path(__file__).resolve().parent.parent
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parent))
-from timeline import read_video_config_fps  # noqa: E402
+from timeline import (  # noqa: E402
+    TranscriptSegmentError,
+    read_video_config_fps,
+    validate_transcript_segment,
+)
 
 FPS = read_video_config_fps(PROJ)  # Phase 3-J: timeline 共通化、videoConfig.FPS と同期
 # Phase 1 短尺 (short) format 既定値、後段で project-config.json から読むよう拡張可能
@@ -282,6 +286,14 @@ def main():
 
     words = transcript["words"]
     segments = transcript["segments"]
+
+    # Phase 3-K (Codex Phase 3-I review P2 #3 拡張): build_telop でも transcript
+    # 壊れたデータを早期検出。
+    for i, seg in enumerate(segments):
+        try:
+            validate_transcript_segment(seg, idx=i)
+        except TranscriptSegmentError as e:
+            raise SystemExit(f"transcript validation failed: {e}")
 
     # 分割 phase: BudouX 呼出 (一括)
     seg_parts: list[list[str]] = []
