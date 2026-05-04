@@ -315,6 +315,160 @@ def test_voicevox_write_narration_data_alignment() -> None:
         assert "sourceStartMs: 1000" in ts
 
 
+def _setup_temp_project(tmp: Path, fps: int = 30) -> Path:
+    """build_slide / build_telop が読む最小ファイルを temp project に揃える."""
+    (tmp / "src").mkdir(parents=True, exist_ok=True)
+    (tmp / "src" / "videoConfig.ts").write_text(make_videoconfig_ts(fps))
+    (tmp / "src" / "Slides").mkdir(parents=True, exist_ok=True)
+    (tmp / "src" / "テロップテンプレート").mkdir(parents=True, exist_ok=True)
+    return tmp
+
+
+def test_build_slide_data_main_e2e() -> None:
+    """build_slide_data.py を temp project で main() 実行、SlideData.ts 出力を検証.
+
+    Codex Phase 3-L 推奨 vi 反映: integration_smoke を build_slide にも展開。
+    monkey-patch (PROJ / FPS) で in-process 実行。
+    """
+    import importlib
+    import build_slide_data as bsd
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = _setup_temp_project(Path(tmp))
+        # 通常 transcript: 2 segments
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps(
+                {
+                    "duration_ms": 5000,
+                    "text": "test",
+                    "segments": [
+                        {"text": "hello", "start": 0, "end": 2000},
+                        {"text": "world", "start": 2000, "end": 4000},
+                    ],
+                    "words": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (proj / "project-config.json").write_text(
+            json.dumps({"format": "short", "tone": "プロフェッショナル"}),
+            encoding="utf-8",
+        )
+
+        # monkey-patch PROJ + FPS (import time に固定されるため re-binding 必要)
+        original_proj = bsd.PROJ
+        original_fps = bsd.FPS
+        bsd.PROJ = proj
+        bsd.FPS = 30
+        try:
+            # main() を直接呼出 (引数は空 → topic mode default)
+            import sys as _sys
+
+            old_argv = _sys.argv
+            _sys.argv = ["build_slide_data.py"]
+            try:
+                bsd.main()
+            finally:
+                _sys.argv = old_argv
+
+            # slideData.ts が生成されたか
+            slide_ts = proj / "src" / "Slides" / "slideData.ts"
+            if not slide_ts.exists():
+                raise AssertionError(f"slideData.ts not generated at {slide_ts}")
+            content = slide_ts.read_text(encoding="utf-8")
+            if "slideData" not in content:
+                raise AssertionError(f"slideData.ts does not export slideData: {content[:100]}")
+        finally:
+            bsd.PROJ = original_proj
+            bsd.FPS = original_fps
+
+
+def test_build_slide_data_validates_bad_transcript() -> None:
+    """build_slide_data.py が壊れた transcript で SystemExit する."""
+    import build_slide_data as bsd
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = _setup_temp_project(Path(tmp))
+        # 壊れた transcript: start > end
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps(
+                {
+                    "segments": [{"text": "hi", "start": 1000, "end": 500}],
+                    "words": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (proj / "project-config.json").write_text(
+            json.dumps({"format": "short", "tone": "プロフェッショナル"}),
+            encoding="utf-8",
+        )
+
+        original_proj = bsd.PROJ
+        bsd.PROJ = proj
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["build_slide_data.py"]
+            try:
+                bsd.main()
+                raise AssertionError("build_slide_data should fail with bad transcript")
+            except SystemExit as e:
+                # 期待: validation error message
+                msg = str(e)
+                if "transcript validation failed" not in msg:
+                    raise AssertionError(f"Expected validation error, got: {msg}")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            bsd.PROJ = original_proj
+
+
+def test_build_scripts_wiring() -> None:
+    """build_slide_data / build_telop_data が timeline 経由で正しく wire されている."""
+    import importlib
+    bsd = importlib.import_module("build_slide_data")
+    btd = importlib.import_module("build_telop_data")
+
+    # FPS が videoConfig.ts から読まれている (Phase 3-J 統合確認)
+    if bsd.FPS <= 0:
+        raise AssertionError(f"build_slide_data FPS should be positive, got {bsd.FPS}")
+    if btd.FPS <= 0:
+        raise AssertionError(f"build_telop_data FPS should be positive, got {btd.FPS}")
+
+    # validate_transcript_segment が timeline から wire されている
+    if bsd.validate_transcript_segment is None:
+        raise AssertionError("build_slide_data should import validate_transcript_segment")
+    if btd.validate_transcript_segment is None:
+        raise AssertionError("build_telop_data should import validate_transcript_segment")
+
+    # build_slide_data の cut helper wrapper が timeline 経由で動く
+    cuts = bsd.build_cut_segments_from_vad(
+        {"speech_segments": [{"start": 0, "end": 1000}]}
+    )
+    assert_eq(len(cuts), 1, "bsd.build_cut_segments_from_vad len")
+    assert_eq(cuts[0]["originalStartMs"], 0, "bsd cuts[0] originalStartMs")
+
+    # build_telop_data の cut helper も validate_vad_schema 経由
+    cuts_t = btd.build_cut_segments_from_vad(
+        {"speech_segments": [{"start": 0, "end": 1000}]}
+    )
+    assert_eq(len(cuts_t), 1, "btd.build_cut_segments_from_vad len")
+
+    # 壊れた VAD で raise (3 script で挙動統一の確認)
+    bad_vad = {"speech_segments": [{"start": 100, "end": 50}]}
+    assert_raises(
+        lambda: bsd.build_cut_segments_from_vad(bad_vad),
+        timeline.VadSchemaError,
+        "bsd raises VadSchemaError",
+    )
+    assert_raises(
+        lambda: btd.build_cut_segments_from_vad(bad_vad),
+        timeline.VadSchemaError,
+        "btd raises VadSchemaError",
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -324,6 +478,9 @@ def main() -> int:
         test_transcript_segment_validation,
         test_voicevox_collect_chunks_validation,
         test_voicevox_write_narration_data_alignment,
+        test_build_scripts_wiring,
+        test_build_slide_data_main_e2e,
+        test_build_slide_data_validates_bad_transcript,
     ]
     failed = []
     for t in tests:
