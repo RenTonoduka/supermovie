@@ -24,11 +24,13 @@ claude --plugin-dir ~/.claude/plugins/supermovie
 
 | スキル | コマンド | 機能 |
 |--------|---------|------|
-| プロジェクト作成 | `/supermovie-init` | ヒアリング → Remotionプロジェクト自動生成 |
+| プロジェクト作成 | `/supermovie-init` | ヒアリング → Remotionプロジェクト自動生成 + preflight_video.py |
 | 文字起こし | `/supermovie-transcribe` | ローカルWhisperで高精度文字起こし |
 | 誤字修正 | `/supermovie-transcript-fix` | 辞書 + Claude LLMで誤字脱字修正 |
 | 動画カット | `/supermovie-cut` | Silero VAD + LLM分析で不要区間カット |
-| テロップ生成 | `/supermovie-subtitles` | LLM意味分割 + 改行処理でテロップ生成 |
+| テロップ生成 | `/supermovie-subtitles` | BudouX意味分割 + 30 templates registry |
+| スライド生成 | `/supermovie-slides` | transcript → SlideSequence (deterministic + optional LLM plan) |
+| ナレーション | `/supermovie-narration` | VOICEVOX で narration.wav 生成 (engine 不在 skip) |
 | 画像生成 | `/supermovie-image-gen` | Gemini APIで図解・画像を自動生成・配置 |
 | SE配置 | `/supermovie-se` | テロップ+画像分析 → 効果音自動配置 |
 | テロップ作成 | `/supermovie-telop-creator` | 新テロップスタイルをデザイン |
@@ -40,7 +42,7 @@ claude --plugin-dir ~/.claude/plugins/supermovie
 あなた: 動画プロジェクトを作成して
         /path/to/your-video.mp4
 
-Claude: ヒアリング → プロジェクト生成 → 文字起こし → 誤字修正 → カット → テロップ → 画像生成 → SE → 完成
+Claude: ヒアリング → プロジェクト生成 → 文字起こし → 誤字修正 → カット → テロップ → スライド → ナレーション → 画像生成 → SE → 完成
 ```
 
 #### プラグインの更新

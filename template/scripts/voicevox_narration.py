@@ -23,8 +23,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import struct
 import sys
 import urllib.error
 import urllib.parse
@@ -94,12 +92,18 @@ def concat_wavs(wavs: list[Path], out_path: Path) -> None:
             out.writeframes(f)
 
 
+def _resolve_path(path_str: str) -> Path:
+    """非 absolute path は PROJ 相対に解決 (skill 実行時の cwd 揺れを吸収)."""
+    p = Path(path_str)
+    return p if p.is_absolute() else PROJ / p
+
+
 def collect_chunks(args, transcript: dict) -> list[str]:
     if args.script:
-        text = Path(args.script).read_text(encoding="utf-8")
+        text = _resolve_path(args.script).read_text(encoding="utf-8")
         return [line.strip() for line in text.splitlines() if line.strip()]
     if args.script_json:
-        plan = load_json(Path(args.script_json))
+        plan = load_json(_resolve_path(args.script_json))
         return [s.get("text", "").strip() for s in plan.get("segments", []) if s.get("text", "").strip()]
     return [s.get("text", "").strip() for s in transcript.get("segments", []) if s.get("text", "").strip()]
 
@@ -116,6 +120,8 @@ def main():
     ap.add_argument("--output", default=str(PROJ / "public" / "narration.wav"))
     ap.add_argument("--keep-chunks", action="store_true",
                     help="chunk wav を public/narration/ に保存 (debug 用)")
+    ap.add_argument("--allow-partial", action="store_true",
+                    help="一部 chunk synthesis 失敗でも narration.wav を出力 (default は全 chunk 成功必須)")
     args = ap.parse_args()
 
     ok, info = check_engine()
@@ -163,6 +169,13 @@ def main():
     if not chunk_paths:
         print("ERROR: no chunks succeeded", file=sys.stderr)
         return 5
+    if not args.allow_partial and len(chunk_paths) < len(chunks):
+        print(
+            f"ERROR: only {len(chunk_paths)}/{len(chunks)} chunks succeeded "
+            f"(--allow-partial で部分成功でも narration.wav 出力可)",
+            file=sys.stderr,
+        )
+        return 6
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -3,7 +3,7 @@
 ## 正規ワークフロー（必ずこの順序で実行）
 
 ```
-/supermovie-init              ← ヒアリング → プロジェクト作成
+/supermovie-init              ← ヒアリング → プロジェクト作成 + preflight_video.py
     ↓ project-config.json
 /supermovie-transcribe        ← 文字起こし（ローカルWhisper or AssemblyAI）
     ↓ transcript.json
@@ -13,12 +13,17 @@
 /supermovie-cut               ← 不要区間カット（VAD + LLM分析）
     ↓ cutData.ts
 /supermovie-subtitles         ← transcript_fixed.json → telopData.ts + titleData.ts
+    ↓                          (BudouX 意味分割 + 30 templates registry)
+/supermovie-slides            ← Phase 3-A/B/C: SlideSequence + slideData.ts
+    ↓                          (deterministic / optional Anthropic LLM plan)
+/supermovie-narration         ← Phase 3-D: VOICEVOX → public/narration.wav
+    ↓                          (engine 不在で skip、--require-engine で fail)
+/supermovie-image-gen         ← テロップ分析 → 画像生成 + insertImageData.ts (Roku 課金判断)
     ↓
-/supermovie-image-gen         ← テロップ分析 → 画像生成 + insertImageData.ts
-    ↓
-/supermovie-se                ← telopData.ts + insertImageData.ts → seData.ts
+/supermovie-se                ← telopData.ts + insertImageData.ts → seData.ts (Roku 素材判断)
     ↓
 npm run dev                   ← Remotion Studioプレビュー
+npm run render                ← out/video.mp4 出力
 ```
 
 ## 動画フォーマット定義
