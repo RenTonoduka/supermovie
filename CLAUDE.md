@@ -81,6 +81,42 @@ python scripts/run.py api_generator.py --prompt "説明図" -a 16:9
   "bgmMood": "アップテンポ",
   "notes": "テンポ重視、キーワード「AI」を強調",
   "createdAt": "2026-03-25",
+  "source": {
+    "video": "main.mp4",
+    "raw": { "width": 3840, "height": 2160 },
+    "display": { "width": 2160, "height": 3840 },
+    "rotation": { "raw": -90, "normalized": -90, "source": "Display Matrix" },
+    "aspect": 0.5625,
+    "sar": "1:1",
+    "dar": null,
+    "inferred_format": "short",
+    "chosen_format": "short",
+    "fps": {
+      "r_frame_rate": "60/1",
+      "avg_frame_rate": "503200/8387",
+      "render_fps": 60,
+      "vfr_metadata_suspect": false
+    },
+    "duration_sec": 41.93,
+    "duration_frames": 2516,
+    "codec": {
+      "name": "hevc",
+      "profile": "Main 10",
+      "pix_fmt": "yuv420p10le",
+      "field_order": "progressive"
+    },
+    "color": {
+      "range": "tv",
+      "space": "bt2020nc",
+      "transfer": "arib-std-b67",
+      "primaries": "bt2020",
+      "hdr_suspect": true,
+      "dovi": { "dv_profile": 8, "dv_level": 9 }
+    },
+    "streams": { "video": 1, "audio": 1, "subtitle": 0, "data": 5 },
+    "risks": ["hdr-or-dovi", "10bit"],
+    "requiresConfirmation": true
+  },
   "transcribe": {
     "os": "darwin-arm64",
     "engine": "mlx-whisper",
@@ -90,6 +126,13 @@ python scripts/run.py api_generator.py --prompt "説明図" -a 16:9
   }
 }
 ```
+
+**source.* schema は `template/scripts/preflight_video.py` が自動生成する。手書きで埋めない。**
+
+**risks キー一覧** (Phase 2 罠ガードと一致):
+`rotation-non-canonical` / `non-square-sar` / `unknown-aspect` / `vfr` / `hdr-or-dovi` / `10bit` / `interlaced` / `multiple-or-missing-video` / `multiple-or-missing-audio` / `embedded-subtitle`
+
+`requiresConfirmation: true` の場合は Roku に risks 内容を提示してから次 phase に進む。
 
 ### transcript.json / transcript_fixed.json
 
