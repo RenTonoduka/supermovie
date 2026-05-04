@@ -135,6 +135,10 @@ def has_drawtext_filter() -> bool:
     return False
 
 
+CELL_W = 480
+CELL_H = 360
+
+
 def make_grid(
     stills: list[Path],
     grid_out: Path,
@@ -148,6 +152,11 @@ def make_grid(
     (部分失敗時の cell 対応崩れを防ぐ、Codex Phase 3-G P2 #5 反映)。
     label=True の時は drawtext で format/frame を焼き込み、False の時は scale のみ
     (drawtext filter 不在環境向け、Codex P1 #2 反映)。
+
+    各 cell を CELL_W × CELL_H の固定 box に letterbox (scale + pad) で統一する。
+    youtube/short/square は aspect 比が異なるため、共通 height だけだと row ごとに
+    width が変わり vstack が input width 不一致で reject する (Codex Phase 3-G fix
+    再 review investigation で実証、新規 P1)。
     """
     if not stills:
         return
@@ -159,19 +168,23 @@ def make_grid(
     n_fmt = len(formats)
     n_frm = len(frames)
     filter_parts: list[str] = []
-    # 各 cell を thumb にスケーリング (短辺 360px に固定)、必要なら drawtext
+    # 各 cell を CELL_W×CELL_H box に letterbox (aspect 維持で fit、余白は黒)
     for i, s in enumerate(stills):
         fmt = formats[i // n_frm]
         frm = frames[i % n_frm]
+        scale_pad = (
+            f"scale={CELL_W}:{CELL_H}:force_original_aspect_ratio=decrease,"
+            f"pad={CELL_W}:{CELL_H}:(ow-iw)/2:(oh-ih)/2:color=black"
+        )
         if label:
             txt = f"{fmt} f{frm}".replace("'", r"\'").replace(":", r"\:")
             filter_parts.append(
-                f"[{i}:v]scale=-2:360,"
+                f"[{i}:v]{scale_pad},"
                 f"drawtext=text='{txt}':fontcolor=white:fontsize=24:"
                 f"box=1:boxcolor=black@0.6:boxborderw=8:x=20:y=20[c{i}]"
             )
         else:
-            filter_parts.append(f"[{i}:v]scale=-2:360[c{i}]")
+            filter_parts.append(f"[{i}:v]{scale_pad}[c{i}]")
 
     # 各 format 行の hstack
     row_labels: list[str] = []
