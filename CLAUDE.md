@@ -264,13 +264,21 @@ type SoundEffect = {
 | `transcript_fixed.json` | transcript_corrected.json |
 | `transcript_audio.wav` | /tmp/supermovie_audio.wav |
 
-## Visual Smoke (Phase 3-G、format 切替後の dimension 検査)
+## Visual Smoke + Timeline Test (Phase 3-G/J/K、品質ゲート)
 
 ```bash
 cd <PROJECT>
-npm run visual-smoke   # 3 format × 2 frame の still + ffprobe + grid
-npm run test           # lint + visual-smoke を一気に
+npm run visual-smoke   # Phase 3-G: 3 format × 2 frame の still + ffprobe + grid
+npm run test:timeline  # Phase 3-K: pure python timeline integration test
+                       #   (timeline.py + collect_chunks + write_narration_data の連鎖検証)
+npm run test           # lint + timeline integration を一気に (visual-smoke は別運用)
 ```
+
+`scripts/test_timeline_integration.py` は engine / node_modules / main.mp4
+不要で動く pure python テスト (`timeline.py` の前提が壊れたら fail)、CI で
+高頻度実行可。`visual-smoke` は実 project (main.mp4 + node_modules) 前提
+なので別運用。
+
 
 `scripts/visual_smoke.py` は `videoConfig.ts` の `FORMAT` を try/finally で
 youtube → short → square と切替て `npx remotion still` を 2 frame ずつ生成、
