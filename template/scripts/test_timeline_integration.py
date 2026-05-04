@@ -682,6 +682,111 @@ def test_generate_slide_plan_api_mock_success() -> None:
             gsp.PROJ = original_proj
 
 
+def test_generate_slide_plan_api_http_error() -> None:
+    """generate_slide_plan API mock: HTTP error → exit 4."""
+    import generate_slide_plan as gsp
+    import os as _os
+    import urllib.error as _urlerr
+    import urllib.request as _urlreq
+    from io import BytesIO
+
+    def mock_urlopen_http_error(req, timeout=60):
+        raise _urlerr.HTTPError(
+            "https://api.anthropic.com/v1/messages",
+            429,
+            "Rate Limit",
+            {},
+            BytesIO(b'{"error": {"type": "rate_limit_error"}}'),
+        )
+
+    original_urlopen = _urlreq.urlopen
+    original_proj = gsp.PROJ
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        gsp.PROJ = proj
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps({"words": [], "segments": []}),
+            encoding="utf-8",
+        )
+        (proj / "project-config.json").write_text(
+            json.dumps({"format": "short", "tone": "プロ"}),
+            encoding="utf-8",
+        )
+        _os.environ["ANTHROPIC_API_KEY"] = "fake-key"
+        _urlreq.urlopen = mock_urlopen_http_error
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["generate_slide_plan.py"]
+            try:
+                ret = gsp.main()
+                assert_eq(ret, 4, "API HTTP error → exit 4")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            _os.environ.pop("ANTHROPIC_API_KEY", None)
+            _urlreq.urlopen = original_urlopen
+            gsp.PROJ = original_proj
+
+
+def test_generate_slide_plan_api_invalid_json() -> None:
+    """generate_slide_plan API mock: response が JSON parse 失敗 → exit 5."""
+    import generate_slide_plan as gsp
+    import os as _os
+    import urllib.request as _urlreq
+
+    invalid_response = json.dumps(
+        {"content": [{"type": "text", "text": "this is not json {{{"}]}
+    ).encode("utf-8")
+
+    class FakeResponse:
+        def __init__(self, body):
+            self._body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def read(self):
+            return self._body
+
+    def mock_urlopen(req, timeout=60):
+        return FakeResponse(invalid_response)
+
+    original_urlopen = _urlreq.urlopen
+    original_proj = gsp.PROJ
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        gsp.PROJ = proj
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps({"words": [], "segments": []}),
+            encoding="utf-8",
+        )
+        (proj / "project-config.json").write_text(
+            json.dumps({"format": "short", "tone": "プロ"}),
+            encoding="utf-8",
+        )
+        _os.environ["ANTHROPIC_API_KEY"] = "fake-key"
+        _urlreq.urlopen = mock_urlopen
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["generate_slide_plan.py"]
+            try:
+                ret = gsp.main()
+                assert_eq(ret, 5, "API invalid JSON → exit 5")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            _os.environ.pop("ANTHROPIC_API_KEY", None)
+            _urlreq.urlopen = original_urlopen
+            gsp.PROJ = original_proj
+
+
 def test_build_scripts_wiring() -> None:
     """build_slide_data / build_telop_data が timeline 経由で正しく wire されている."""
     import importlib
@@ -744,6 +849,8 @@ def main() -> int:
         test_generate_slide_plan_skip_no_api_key,
         test_generate_slide_plan_missing_inputs,
         test_generate_slide_plan_api_mock_success,
+        test_generate_slide_plan_api_http_error,
+        test_generate_slide_plan_api_invalid_json,
     ]
     failed = []
     for t in tests:
