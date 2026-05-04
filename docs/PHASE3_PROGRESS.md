@@ -1,6 +1,10 @@
 # SuperMovie Phase 3 Progress (2026-05-04)
 
-Phase 3-A 〜 Phase 3-M の commit 集約と Codex review 履歴。次セッション着手前の状態把握用。
+Phase 3-A 〜 Phase 3-O の commit 集約と Codex review 履歴。次セッション着手前の状態把握用。
+
+`docs/PHASE3_PROGRESS.md` は `scripts/regen_phase3_progress.sh` で commit chain
+section が auto-gen される。本文 (Phase 別 deliverable / Codex review 履歴 / 残候補)
+は手動メンテ。`git log roku/phase3i-transcript-alignment..HEAD --oneline` を一次 source。
 
 ## Branch chain
 
@@ -78,7 +82,23 @@ main
 - build_telop ms_to_playback_frame を timeline 経由 (find_cut_segment_for_ms 残置)
 - build_telop e2e test (call_budoux stub)
 - generate_slide_plan skip + missing inputs test
-- (残置) generate_slide_plan API mock test (urllib monkey-patch 必要)
+- docs/PHASE3_PROGRESS.md + docs/reviews/ 9 件 commit (Codex artifact)
+
+### Phase 3-N (Studio hot-reload + API mock 完成, on roku/phase3j-timeline)
+- generate_slide_plan API mock test (urllib monkey-patch、success / HTTP error / invalid JSON)
+- Codex Phase 3-M review P2×3 fix (PHASE3_PROGRESS 更新 / API key save+restore /
+  test isolation 強化)
+- src/Narration/useNarrationMode.ts 新規 (watchStaticFile + invalidateNarrationMode +
+  React state、Player/render では try/catch で no-op fallback)
+- mode.ts に invalidateNarrationMode export 追加
+- MainVideo / NarrationAudio が hook 経由に統一
+
+### Phase 3-O (validation + auto-gen + race fix, on roku/phase3j-timeline)
+- build_slide_data --plan validation 経路 test (Codex P2 #3 解消、fallback / strict 両 path)
+- scripts/regen_phase3_progress.sh: PHASE3_PROGRESS commit chain 自動再生成 helper
+- voicevox_narration.py write 順序を chunks → narrationData.ts → narration.wav に
+  変更 (Codex Phase 3-N P2 hot-reload race 解消、Studio で chunks 経路が先に
+  成立して legacy fallback が一瞬鳴る window を消す)
 
 ## Codex review 履歴
 
@@ -94,17 +114,24 @@ main
 | CODEX_REVIEW_PHASE3J_AND_NEXT_20260504T221120 | Phase 3-J | P1×1 + P2×2 + P3×1、Phase 3-J review fix で close |
 | CODEX_REVIEW_PHASE3J_FIX_AND_3L_20260504T222048 | Phase 3-J fix | 4/5 ✅ + P1 partial (NARRATION_DIR.mkdir 順序)、即 fix 済 |
 | CODEX_REVIEW_PHASE3L_AND_3M_20260504T222846 | Phase 3-L vi + P1 partial fix | P2 #1 (cleanup contract コメント) + P2 #2 (test isolation)、94bc3d5 で全 fix |
-| CODEX_REVIEW_PHASE3M_AND_3N_20260504T223552 | Phase 3-M comprehensive | P0/P1 なし、P2×3 (PHASE3_PROGRESS 不正確 / API key restore / API mock schema validation 未踏)、Phase 3-N 推奨 ii Studio hot-reload |
+| CODEX_REVIEW_PHASE3M_AND_3N_20260504T223552 | Phase 3-M comprehensive | P0/P1 なし、P2×3 (PHASE3_PROGRESS 不正確 / API key restore / API mock schema validation 未踏)、Phase 3-N 推奨 ii Studio hot-reload、f34abf3 で P2 #1+#2 / 6c8fb00 で P2 #3 fix |
+| CODEX_REVIEW_PHASE3N_AND_3O_20260504T224734 | Phase 3-N + 3-O i/ii | P2 #1 (hot-reload race) + P3 #1 (PHASE3_PROGRESS body stale)、本 commit で全 fix |
 
 ## 未着手 / 残候補
 
 ### 自走可
-- Phase 3-M iii API mock test (urllib.request.urlopen monkey-patch)
-- Phase 3-M iv any 警告ゼロ化 (TS-side、eslint-config-flat 4.x)
-- Phase 3-M vi Studio hot-reload (watchStaticFile、Studio 限定で Player 非影響)
+- any 警告ゼロ化 (TS-side、eslint-config-flat 4.x、telopTemplate 30 個全 typing 必要、
+  npm install 走らせる必要あり)
+- Phase 3-O ii (PHASE3_PROGRESS auto-gen) は Phase 別 deliverable / Codex review 履歴 /
+  残候補 sections も auto-gen するなら拡張余地あり
+- voicevox_narration.py の sentinel 化 (現行 race fix で十分でも、より厳密な
+  signal file を narrationData.ts 後に書く形も Codex 言及)
 
-### Roku 判断領域
+### Roku 判断領域 (deploy / 段取り / 課金 / 法的)
+- ★ PR / merge 戦略 (roku/phase3j-timeline は phase3i / phase3h / phase3g / phase3f を
+  順次 merge する必要あり、複数分岐を 1 PR に潰すか段階 merge にするか)
 - Phase 3-G visual_smoke を実 project で end-to-end 検証 (main.mp4 fixture 必要)
+- CI 整備 (GitHub Actions / 別 CI provider、test:timeline + lint 自動化)
 - slide_plan.v2 + scene_plan 統合 (Anthropic API 課金)
 - supermovie-image-gen 統合 (Gemini API 課金)
 - supermovie-se 統合 (素材判断)

@@ -592,22 +592,13 @@ def main():
                 pass
         return 6
 
-    out_path = _resolve_path(args.output)
-    try:
-        concat_wavs_atomic(chunk_paths, out_path)
-    except (wave.Error, EOFError) as e:
-        print(f"ERROR: WAV concat failed (wave.Error / EOFError): {e}", file=sys.stderr)
-        for p in chunk_paths:
-            try:
-                p.unlink()
-            except OSError:
-                pass
-        return 6
-    print(f"\nwrote: {out_path} ({out_path.stat().st_size} bytes)")
-    print(f"chunks succeeded: {len(chunk_paths)} / {len(chunks)} synthesized")
-
-    # Phase 3-H/I: chunk metadata + narrationData.ts (atomic、最後に書く)
-    # cut_segments は synthesis 前 (Codex Phase 3-J review P1) で取得済み
+    # Codex Phase 3-N review P2 #1 反映: write 順序を chunks → narrationData.ts →
+    # narration.wav に変更。
+    # 理由: Studio hot-reload 経路では narration.wav 出現 → useNarrationMode が
+    # legacy 経路に flip → narrationData.ts 出現で HMR reload → chunks 経路に
+    # flip という race が発生、その間 legacy fallback が一瞬鳴る。narrationData.ts
+    # を先に書くことで、HMR が先に反映されて chunks 経路が確定してから legacy
+    # narration.wav が現れる順序になる。
 
     # Codex Phase 3-I review P3 #6 反映: chunk_paths と chunk_meta の長さ ガード
     # python -O で assert は消えるため、runtime check + raise 化
@@ -624,16 +615,9 @@ def main():
         segments, ts_path, meta_path = write_narration_data(pairs, fps, cut_segments)
     except (wave.Error, EOFError) as e:
         print(f"ERROR: WAV duration probe failed (wave.Error / EOFError): {e}", file=sys.stderr)
-        # narrationData/meta は temp 書き出しなので残らない、chunks は残るが atomic 失敗
-        # so user は再実行 or --allow-partial で部分書き出し選択可
         for p in chunk_paths:
             try:
                 p.unlink()
-            except OSError:
-                pass
-        if out_path.exists():
-            try:
-                out_path.unlink()
             except OSError:
                 pass
         return 6
@@ -642,6 +626,31 @@ def main():
     )
     print(f"wrote: {ts_path} ({len(segments)} segments, total_frames={total_frames})")
     print(f"wrote: {meta_path}")
+
+    # Phase 3-N race fix: narrationData.ts を書いた後で narration.wav を書く
+    # (これで Studio hot-reload で chunks 経路が先に成立、legacy fallback が
+    # 一瞬鳴る race を解消)。
+    out_path = _resolve_path(args.output)
+    try:
+        concat_wavs_atomic(chunk_paths, out_path)
+    except (wave.Error, EOFError) as e:
+        print(f"ERROR: WAV concat failed (wave.Error / EOFError): {e}", file=sys.stderr)
+        # narrationData.ts と chunks を rollback (all-or-nothing 維持)
+        for p in chunk_paths:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        # narrationData.ts を空 array に戻す (cleanup_stale_all 同等の reset)
+        reset_narration_data_ts()
+        if CHUNK_META_JSON.exists():
+            try:
+                CHUNK_META_JSON.unlink()
+            except OSError:
+                pass
+        return 6
+    print(f"\nwrote: {out_path} ({out_path.stat().st_size} bytes)")
+    print(f"chunks succeeded: {len(chunk_paths)} / {len(chunks)} synthesized")
 
     summary = {
         "speaker": args.speaker,
