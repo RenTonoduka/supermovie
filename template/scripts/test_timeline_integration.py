@@ -534,6 +534,53 @@ def test_build_telop_data_validates_bad_transcript() -> None:
             btd.call_budoux = original_call
 
 
+def test_generate_slide_plan_skip_no_api_key() -> None:
+    """generate_slide_plan.py: ANTHROPIC_API_KEY 未設定で exit 0 (skip)."""
+    import generate_slide_plan as gsp
+    import os as _os
+
+    original_proj = gsp.PROJ
+    with tempfile.TemporaryDirectory() as tmp:
+        gsp.PROJ = Path(tmp)
+        original_key = _os.environ.pop("ANTHROPIC_API_KEY", None)
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["generate_slide_plan.py"]
+            try:
+                ret = gsp.main()
+                assert_eq(ret, 0, "no-api-key skip exit 0")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            if original_key is not None:
+                _os.environ["ANTHROPIC_API_KEY"] = original_key
+            gsp.PROJ = original_proj
+
+
+def test_generate_slide_plan_missing_inputs() -> None:
+    """generate_slide_plan.py: transcript / config 不在で exit 3."""
+    import generate_slide_plan as gsp
+    import os as _os
+
+    original_proj = gsp.PROJ
+    with tempfile.TemporaryDirectory() as tmp:
+        gsp.PROJ = Path(tmp)  # transcript_fixed.json / project-config.json なし
+        _os.environ["ANTHROPIC_API_KEY"] = "test-key-fake"
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["generate_slide_plan.py"]
+            try:
+                ret = gsp.main()
+                assert_eq(ret, 3, "missing inputs exit 3")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            del _os.environ["ANTHROPIC_API_KEY"]
+            gsp.PROJ = original_proj
+
+
 def test_build_scripts_wiring() -> None:
     """build_slide_data / build_telop_data が timeline 経由で正しく wire されている."""
     import importlib
@@ -593,6 +640,8 @@ def main() -> int:
         test_build_slide_data_validates_bad_transcript,
         test_build_telop_data_main_e2e,
         test_build_telop_data_validates_bad_transcript,
+        test_generate_slide_plan_skip_no_api_key,
+        test_generate_slide_plan_missing_inputs,
     ]
     failed = []
     for t in tests:
