@@ -33,6 +33,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parent))
 from timeline import (  # noqa: E402
     TranscriptSegmentError,
     VadSchemaError,
+    ms_to_playback_frame as _msf_raw,
     read_video_config_fps,
     validate_transcript_segment,
     validate_vad_schema,
@@ -264,6 +265,9 @@ def build_cut_segments_from_vad(vad):
 
 
 def find_cut_segment_for_ms(ms, cut_segments):
+    """build_telop 固有の用途で使われる helper (line 353-354 の fallback search 等)、
+    timeline には移さず local 維持 (Codex Phase 3-M consultation 候補 ii、
+    cut boundary clamp 用途で残置妥当)。"""
     for cs in cut_segments:
         if cs["originalStartMs"] <= ms <= cs["originalEndMs"]:
             return cs
@@ -271,11 +275,11 @@ def find_cut_segment_for_ms(ms, cut_segments):
 
 
 def ms_to_playback_frame(ms, cut_segments):
-    cs = find_cut_segment_for_ms(ms, cut_segments)
-    if not cs:
-        return None
-    offset_ms = ms - cs["originalStartMs"]
-    return cs["playbackStart"] + round(offset_ms / 1000 * FPS)
+    """Phase 3-M (Codex Phase 3-L 次点指摘 ii): timeline.ms_to_playback_frame
+    に委譲。FPS 注入 wrapper、build_telop 固有挙動 (cut_segments 不在 → None)
+    との差は run-time に main() が必ず cut_segments を提供するため不変。
+    """
+    return _msf_raw(ms, FPS, cut_segments)
 
 
 # ---------------- 本体 ----------------
