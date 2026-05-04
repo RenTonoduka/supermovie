@@ -110,9 +110,12 @@ main
 - supermovie-se 統合 (素材判断)
 - SadTalker / HeyGen / Kling 統合 (法的 / モラルリスク + API 課金)
 
-## 全 commit count (roku/phase3j-timeline branch、最新 13 件)
+## 全 commit count (roku/phase3j-timeline branch、最新 16 件)
 
 ```
+6c8fb00 test(timeline): build_slide_data --plan validation 経路 (Phase 3-O i / Codex P2 #3)
+1d27892 feat(narration): Studio hot-reload via watchStaticFile (Phase 3-N ii)
+f34abf3 fix(timeline): Codex Phase 3-M review P2 #1 + #2 fix
 ae3d2e8 test(timeline): generate_slide_plan API HTTP error + invalid JSON path (Phase 3-N i+)
 8abdb2b test(timeline): generate_slide_plan Anthropic API mock test (Phase 3-N i)
 94bc3d5 fix(timeline): Codex Phase 3-L re-review P2 2 件 fix
@@ -121,16 +124,14 @@ bed46b7 test(timeline): generate_slide_plan skip + missing inputs subtest (Phase
 350dff7 refactor(telop): ms_to_playback_frame を timeline 経由に統一 (Phase 3-M ii)
 3c765e3 test(timeline): build_telop_data e2e + bad transcript subtest (Phase 3-M core 1)
 96e5215 fix(narration): P1 partial NARRATION_DIR.mkdir 順序 + Phase 3-L vi 展開
-a9019c7 feat(timeline): require_timing strict mode + validate_transcript_segments helper
-e2a1a39 fix(timeline): Codex Phase 3-J review 4 件 fix
-41b5ef2 fix(timeline): transcript validation を build_slide / build_telop にも展開
-398ea94 test(timeline): pure python integration smoke test
-66e2aeb feat(timeline): timeline.py 共通化 + Phase 3-I review 6 件 fix
+a9019c7 feat(timeline): require_timing strict mode + validate_transcript_segments helper (Phase 3-L core)
+e2a1a39 fix(timeline): Codex Phase 3-J review 4 件 fix (P1×1 + P2×2 + P3×1)
+41b5ef2 fix(timeline): transcript validation を build_slide / build_telop にも展開 (Phase 3-K core 2)
+398ea94 test(timeline): pure python integration smoke test (Phase 3-K core 1)
+66e2aeb feat(timeline): timeline.py 共通化 + Phase 3-I review 6 件 fix (Phase 3-J)
 ```
 
-(更新: 2026-05-04 22:42、Codex Phase 3-M review P2 #1 反映で 9 件 → 13 件 + 後続
-fix commit に追従するため `git log roku/phase3i-transcript-alignment..HEAD --oneline`
-を一次 source として参照すること。)
+(更新: 2026-05-04_22:49、`scripts/regen_phase3_progress.sh` で auto-gen、最新 commit を反映)
 
 ## Test gates
 
