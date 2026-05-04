@@ -1,20 +1,21 @@
-# SuperMovie Phase 3 Release Note (2026-05-04)
+# SuperMovie Phase 3 Release Note (2026-05-04 → 2026-05-05)
 
-`roku/phase3j-timeline` HEAD: `d71c503` (Codex CODEX_FINAL_VERIFY_20260504T231638
-で release-ready 判定)
+`roku/phase3j-timeline` HEAD: `ad15fd2` (Codex CODEX_REVIEW_PHASE3V_FINAL_20260505T064250
+で「P0/P1/P2 なし、Phase 3-V production 品質で止めてよい」 verdict)
 
-Phase 3-A 〜 Phase 3-Q の自走実装結果。本 note は Roku 不在モード中に Claude+Codex
-協働で 26 commit を積んだ成果物の release assertion を固定する目的。
+Phase 3-A 〜 Phase 3-V の自走実装結果。本 note は Roku 不在モード中に Claude+Codex
+協働で 53 commit を積んだ成果物の release assertion を固定する目的。
 
 ## Release-readiness statement (2026-05-04 時点、技術 readiness のみ)
 
 | 項目 | 状態 |
 |---|---|
-| code 側 P0/P1 (Codex 14 review 通過) | ✅ ゼロ |
+| code 側 P0/P1/P2 (Codex 22+ review 通過) | ✅ ゼロ |
 | pure python integration smoke (`test:timeline`) | ✅ 20/20 pass |
+| TypeScript lint / tsc (`npm run lint`) | ✅ exit 0 (errors 0、warnings 0) |
+| React component test (`npm run test:react`) | ✅ 18/18 pass (vitest + jsdom + RTL、4 + 6 + 5 + 3) |
 | docs vs git log drift (`regen_phase3_progress.sh --verify`) | ✅ exit 0 (drift 1 = self-reference 許容内) |
 | worktree clean | ✅ untracked なし |
-| TypeScript lint / tsc | [未検証] (npm install permission issue で sandbox 内検証不可、Roku 環境で再実行推奨) |
 | 実 project visual-smoke / render e2e | [未検証] (Roku 判断領域、main.mp4 fixture 必要) |
 
 Roku 判断領域 (release blocker 候補):
@@ -64,16 +65,35 @@ Roku 判断領域 (release blocker 候補):
   - `--verify` mode: docs vs git log drift 検査 (CI guard、drift > 1 で exit 3)
   - `--source <SHA>`: HEAD ではなく指定 SHA まで
   - self-reference off-by-one を intrinsic 設計として明文化
+- `scripts/check_release_ready.sh`: 6 gate composite check
+  (env / worktree clean / regen --verify / python smoke / lint / React test)
+
+### 6. TS compile + React test 完封 (Phase 3-R/S/T/U/V)
+- Phase 3-R B4: any 警告ゼロ化 (telopConfigTypes.ts 9 interface、Telop.tsx
+  escape 全削除、TelopAnimationConfig.slideDirection literal narrowing)
+- Phase 3-S B5: React component test 基盤 (vitest + jsdom + @testing-library/react)
+  + useNarrationMode 4 test (none / legacy / watch trigger / unmount cleanup)
+- Phase 3-T: chunks mode test 6 件 (chunks happy / precedence / fallback /
+  watcher count / chunk watch trigger)
+- Phase 3-U: defensive 5 件 (legacy throw / cancel throw / null cancel / initial
+  fallback + chunk note)
+- Phase 3-V: 二重 hook dedup (NarrationAudioWithMode pure component で
+  watcher 数半減) + chunk-side defensive 3 件 (一部/全/initial fallback)
+- 計 React test 18/18 pass、`as any` escape ゼロ、watcher 二重登録解消
 
 ## test gate コマンド
 
 ```bash
 cd <PROJECT>  # template から copy された実 project
+npm install                              # 初回のみ
 npm run test:timeline                    # pure python 20 test (engine 不要)
-npm run test                             # eslint + tsc + test:timeline
+npm run test:react                       # React 18 test (vitest + jsdom + RTL)
+npm run lint                             # eslint 0 warning + tsc 0 error
+npm run test                             # lint + test:timeline + test:react を一気に
 npm run visual-smoke                     # 実 main.mp4 + node_modules で 3 format
                                          # × 2 frame still + dimension regression 検査
-bash scripts/regen_phase3_progress.sh --verify  # docs drift 検査
+bash scripts/check_release_ready.sh      # 6 gate composite (上記 5 + 環境/worktree)
+bash scripts/regen_phase3_progress.sh --verify  # docs drift 検査 (CI guard)
 ```
 
 ## Codex review 履歴 (14 件)
