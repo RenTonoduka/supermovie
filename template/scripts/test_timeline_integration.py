@@ -597,6 +597,91 @@ def test_generate_slide_plan_missing_inputs() -> None:
             gsp.PROJ = original_proj
 
 
+def test_generate_slide_plan_api_mock_success() -> None:
+    """generate_slide_plan API mock: valid response → slide_plan.json 生成.
+
+    Codex Phase 3-M cand iii の残置部分 (urllib mock + valid response 検証)。
+    """
+    import generate_slide_plan as gsp
+    import os as _os
+    import urllib.request as _urlreq
+
+    fake_plan = {
+        "version": gsp.PLAN_VERSION,
+        "slides": [
+            {
+                "id": 1,
+                "startWordIndex": 0,
+                "endWordIndex": 0,
+                "title": "テスト",
+                "bullets": [],
+                "align": "left",
+            }
+        ],
+    }
+    fake_response_body = json.dumps(
+        {"content": [{"type": "text", "text": json.dumps(fake_plan, ensure_ascii=False)}]}
+    ).encode("utf-8")
+
+    class FakeResponse:
+        def __init__(self, body):
+            self._body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def read(self):
+            return self._body
+
+    def mock_urlopen(req, timeout=60):
+        return FakeResponse(fake_response_body)
+
+    original_urlopen = _urlreq.urlopen
+    original_proj = gsp.PROJ
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        gsp.PROJ = proj
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps(
+                {
+                    "words": [{"text": "hi", "start": 0, "end": 100}],
+                    "segments": [{"text": "hi", "start": 0, "end": 100}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (proj / "project-config.json").write_text(
+            json.dumps({"format": "short", "tone": "プロ"}),
+            encoding="utf-8",
+        )
+
+        _os.environ["ANTHROPIC_API_KEY"] = "fake-key"
+        _urlreq.urlopen = mock_urlopen
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            output_path = proj / "slide_plan.json"
+            _sys.argv = ["generate_slide_plan.py", "--output", str(output_path)]
+            try:
+                ret = gsp.main()
+                assert_eq(ret, 0, "API mock success exit 0")
+                if not output_path.exists():
+                    raise AssertionError(f"slide_plan.json not generated at {output_path}")
+                plan = json.loads(output_path.read_text(encoding="utf-8"))
+                assert_eq(plan["version"], gsp.PLAN_VERSION, "plan version")
+                assert_eq(len(plan["slides"]), 1, "plan slides count")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            _os.environ.pop("ANTHROPIC_API_KEY", None)
+            _urlreq.urlopen = original_urlopen
+            gsp.PROJ = original_proj
+
+
 def test_build_scripts_wiring() -> None:
     """build_slide_data / build_telop_data が timeline 経由で正しく wire されている."""
     import importlib
@@ -658,6 +743,7 @@ def main() -> int:
         test_build_telop_data_validates_bad_transcript,
         test_generate_slide_plan_skip_no_api_key,
         test_generate_slide_plan_missing_inputs,
+        test_generate_slide_plan_api_mock_success,
     ]
     failed = []
     for t in tests:
