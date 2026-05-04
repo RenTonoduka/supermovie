@@ -21,10 +21,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 PROJ = Path(__file__).resolve().parent.parent
-FPS = 60  # videoConfig.FPS と同期、後段で project-config から読むよう拡張可能
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from timeline import (  # noqa: E402
+    build_cut_segments_from_vad as _bcs_raw,
+    ms_to_playback_frame as _msf_raw,
+    read_video_config_fps,
+    validate_vad_schema,
+)
+
+FPS = read_video_config_fps(PROJ)  # Phase 3-J: timeline 共通化、videoConfig.FPS と同期
 SILENCE_THRESHOLD_MS = 1500  # 1.5 秒以上の無音で話題区切り
 TITLE_MAX_CHARS = {"youtube": 18, "short": 14, "square": 16}
 BULLET_MAX_CHARS = {"youtube": 24, "short": 18, "square": 20}
@@ -37,33 +46,19 @@ def load_json(p: Path):
 
 
 def build_cut_segments_from_vad(vad: dict | None) -> list[dict]:
-    if not vad or "speech_segments" not in vad:
+    """Phase 3-J: timeline.build_cut_segments_from_vad を FPS 注入 wrapper.
+
+    旧 inline 実装は timeline.py に集約した。validate を経由して schema 破損は
+    raise (build_slide_data は cut が壊れていれば slide も壊れるため fail-fast)。
+    """
+    if not vad:
         return []
-    out = []
-    cursor_ms = 0
-    for i, seg in enumerate(vad["speech_segments"]):
-        s_ms = seg["start"]
-        e_ms = seg["end"]
-        dur_ms = e_ms - s_ms
-        out.append({
-            "id": i + 1,
-            "originalStartMs": s_ms,
-            "originalEndMs": e_ms,
-            "playbackStart": round(cursor_ms / 1000 * FPS),
-            "playbackEnd": round((cursor_ms + dur_ms) / 1000 * FPS),
-        })
-        cursor_ms += dur_ms
-    return out
+    return _bcs_raw(validate_vad_schema(vad), FPS)
 
 
 def ms_to_playback_frame(ms: int, cut_segments: list[dict]) -> int | None:
-    if not cut_segments:
-        return round(ms / 1000 * FPS)
-    for cs in cut_segments:
-        if cs["originalStartMs"] <= ms <= cs["originalEndMs"]:
-            offset_ms = ms - cs["originalStartMs"]
-            return cs["playbackStart"] + round(offset_ms / 1000 * FPS)
-    return None
+    """Phase 3-J: timeline.ms_to_playback_frame を FPS 注入 wrapper."""
+    return _msf_raw(ms, FPS, cut_segments)
 
 
 def truncate(text: str, max_chars: int) -> str:

@@ -42,7 +42,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 import urllib.error
 import urllib.parse
@@ -51,17 +50,26 @@ import wave
 from pathlib import Path
 
 PROJ = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from timeline import (  # noqa: E402
+    DEFAULT_FPS,
+    TranscriptSegmentError,
+    VadSchemaError,
+    build_cut_segments_from_vad,
+    load_cut_segments,
+    ms_to_playback_frame,
+    read_video_config_fps,
+    validate_transcript_segment,
+)
+
 ENGINE_BASE = "http://127.0.0.1:50021"
 DEFAULT_SPEAKER = 3  # ずんだもん (ノーマル)、Roku が --speaker で上書き可
-DEFAULT_FPS = 30
 TIMEOUT = 30
 
 NARRATION_DIR = PROJ / "public" / "narration"
 NARRATION_LEGACY_WAV = PROJ / "public" / "narration.wav"
 NARRATION_DATA_TS = PROJ / "src" / "Narration" / "narrationData.ts"
 CHUNK_META_JSON = NARRATION_DIR / "chunk_meta.json"
-VIDEO_CONFIG = PROJ / "src" / "videoConfig.ts"
-FPS_LINE_RE = re.compile(r"^export const FPS\s*=\s*(\d+)\s*;", re.MULTILINE)
 EMPTY_NARRATION_DATA = (
     "import type { NarrationSegment } from './types';\n"
     "\n"
@@ -239,82 +247,14 @@ def reset_narration_data_ts() -> None:
         atomic_write_text(NARRATION_DATA_TS, EMPTY_NARRATION_DATA)
 
 
-def read_video_config_fps(default: int = DEFAULT_FPS) -> int:
-    """src/videoConfig.ts の `export const FPS = N;` を一次 source として読む.
+def project_load_cut_segments(fps: int) -> list[dict]:
+    """voicevox 側の load_cut_segments wrapper (PROJ + fail_fast 戦略を固定).
 
-    Codex Phase 3-H review P2 #4 + P2 #5 反映: project-config.json の
-    malformed (cfg["source"] が None / str) で AttributeError を起こす経路と、
-    Remotion render が videoConfig.FPS を使う一方で script が project-config.json を
-    読むため両者がズレる経路の両方を、videoConfig.ts 直読で解消する。
+    Codex Phase 3-I review P1 #2 反映: narration script では legacy 経路へ
+    流れて stale narration を出す危険があるので fail_fast=True (raise)。
+    呼び出し側で VadSchemaError / OSError / json.JSONDecodeError を catch する。
     """
-    if not VIDEO_CONFIG.exists():
-        return default
-    try:
-        text = VIDEO_CONFIG.read_text(encoding="utf-8")
-    except OSError:
-        return default
-    m = FPS_LINE_RE.search(text)
-    if not m:
-        return default
-    try:
-        fps = int(m.group(1))
-    except ValueError:
-        return default
-    return fps if fps > 0 else default
-
-
-VAD_RESULT = PROJ / "vad_result.json"
-
-
-def build_cut_segments_from_vad(vad: dict | None, fps: int) -> list[dict]:
-    """vad_result.json の speech_segments[] から cut 後 timeline mapping を構築.
-
-    build_slide_data.py の同名関数と同型 (Codex Phase 3-I review 重点で
-    一次 source 共有)。fps は voicevox_narration 側の videoConfig.FPS を渡す。
-    """
-    if not vad or "speech_segments" not in vad:
-        return []
-    out = []
-    cursor_ms = 0
-    for i, seg in enumerate(vad["speech_segments"]):
-        s_ms = seg["start"]
-        e_ms = seg["end"]
-        dur_ms = e_ms - s_ms
-        out.append({
-            "id": i + 1,
-            "originalStartMs": s_ms,
-            "originalEndMs": e_ms,
-            "playbackStart": round(cursor_ms / 1000 * fps),
-            "playbackEnd": round((cursor_ms + dur_ms) / 1000 * fps),
-        })
-        cursor_ms += dur_ms
-    return out
-
-
-def ms_to_playback_frame(ms: int, fps: int, cut_segments: list[dict]) -> int | None:
-    """元動画の ms を playback frame に変換 (cut-aware).
-
-    cut_segments が空なら直接変換。ms が cut 範囲外 (cut で除外された箇所) は
-    None を返す (呼出側が累積 fallback)。
-    """
-    if not cut_segments:
-        return round(ms / 1000 * fps)
-    for cs in cut_segments:
-        if cs["originalStartMs"] <= ms <= cs["originalEndMs"]:
-            offset_ms = ms - cs["originalStartMs"]
-            return cs["playbackStart"] + round(offset_ms / 1000 * fps)
-    return None
-
-
-def load_cut_segments(fps: int) -> list[dict]:
-    """vad_result.json から cut_segments を構築. 不在/壊れていれば []."""
-    if not VAD_RESULT.exists():
-        return []
-    try:
-        return build_cut_segments_from_vad(load_json(VAD_RESULT), fps)
-    except (json.JSONDecodeError, OSError) as e:
-        print(f"WARN: vad_result.json 読込失敗、cut-aware mapping skip: {e}", file=sys.stderr)
-        return []
+    return load_cut_segments(PROJ, fps, fail_fast=True)
 
 
 def write_narration_data(
@@ -379,9 +319,16 @@ def write_narration_data(
         cumulative_frame = start_frame + duration_frames
 
     if overlap_warns:
+        # Codex Phase 3-I review P2 #4 反映: 文言を「transcript bug ではなく
+        # TTS が transcript より長い signal」として明確化、対処は transcript
+        # 再分割 / chunk text 短縮 / TTS 早話速度 / 隣接 chunk の sourceStart 後ろ送り。
         print(
-            f"WARN: {len(overlap_warns)} narration overlap(s) detected "
-            f"(<Sequence> 重複で二重再生になる、--allow-partial や transcript 再分割を検討):",
+            f"WARN: {len(overlap_warns)} narration <Sequence> overlap(s) detected. "
+            f"これは transcript の bug ではなく、TTS 出力 wav が元 transcript の "
+            f"interval より長いか、隣接 chunk が transcript timing 上で接近しすぎ。"
+            f"render では二重再生になるので、対処: "
+            f"(1) transcript 再分割、(2) chunk text 短縮、(3) speaker 早話速度、"
+            f"(4) sourceStartMs を後ろ送り。",
             file=sys.stderr,
         )
         for w in overlap_warns:
@@ -442,8 +389,10 @@ def _resolve_path(path_str: str) -> Path:
 def collect_chunks(args, transcript: dict) -> list[dict]:
     """各 chunk を {text, sourceStartMs, sourceEndMs} で返す.
 
-    Phase 3-I: transcript_fixed.json の segments[].start/end を保持して、
-    write_narration_data 側で transcript timing alignment できるようにする。
+    Phase 3-I: transcript_fixed.json の segments[].start/end を保持。
+    Phase 3-J: validate_transcript_segment で start > end / 型不正を検出して
+    TranscriptSegmentError raise (Codex review P2 #3 反映、mlx-whisper の
+    稀なバグや手編集ミスによる壊れた transcript を早期検出)。
     --script は 1 行 1 chunk で timing なし、--script-json は startMs/endMs
     optional で受け付ける。
     """
@@ -455,24 +404,37 @@ def collect_chunks(args, transcript: dict) -> list[dict]:
         ]
     if args.script_json:
         plan = load_json(_resolve_path(args.script_json))
-        return [
+        out: list[dict] = []
+        for i, s in enumerate(plan.get("segments", [])):
+            if not s.get("text", "").strip():
+                continue
+            # validate_transcript_segment は start/end key だけ見るので script-json
+            # の startMs/endMs を一旦同名 key にコピーして検証
+            validate_transcript_segment(
+                {"text": s.get("text"), "start": s.get("startMs"), "end": s.get("endMs")},
+                idx=i,
+            )
+            out.append(
+                {
+                    "text": s["text"].strip(),
+                    "sourceStartMs": s.get("startMs"),
+                    "sourceEndMs": s.get("endMs"),
+                }
+            )
+        return out
+    out_t: list[dict] = []
+    for i, s in enumerate(transcript.get("segments", [])):
+        if not s.get("text", "").strip():
+            continue
+        validate_transcript_segment(s, idx=i)
+        out_t.append(
             {
-                "text": s.get("text", "").strip(),
-                "sourceStartMs": s.get("startMs"),
-                "sourceEndMs": s.get("endMs"),
+                "text": s["text"].strip(),
+                "sourceStartMs": s.get("start"),
+                "sourceEndMs": s.get("end"),
             }
-            for s in plan.get("segments", [])
-            if s.get("text", "").strip()
-        ]
-    return [
-        {
-            "text": s.get("text", "").strip(),
-            "sourceStartMs": s.get("start"),
-            "sourceEndMs": s.get("end"),
-        }
-        for s in transcript.get("segments", [])
-        if s.get("text", "").strip()
-    ]
+        )
+    return out_t
 
 
 def main():
@@ -524,12 +486,17 @@ def main():
         print(f"ERROR: transcript_fixed.json missing under {PROJ}", file=sys.stderr)
         return 3
     transcript = load_json(transcript_path) if transcript_path.exists() else {}
-    chunks = collect_chunks(args, transcript)
+    try:
+        chunks = collect_chunks(args, transcript)
+    except TranscriptSegmentError as e:
+        # Codex Phase 3-I review P2 #3: 壊れた transcript で TTS を回さない
+        print(f"ERROR: transcript validation failed: {e}", file=sys.stderr)
+        return 3
     if not chunks:
         print("ERROR: no narration chunks", file=sys.stderr)
         return 3
 
-    fps = args.fps if args.fps is not None else read_video_config_fps()
+    fps = args.fps if args.fps is not None else read_video_config_fps(PROJ)
     if fps <= 0:
         print(f"ERROR: invalid fps={fps} (--fps is positive integer required)", file=sys.stderr)
         return 4
@@ -592,9 +559,34 @@ def main():
     print(f"chunks succeeded: {len(chunk_paths)} / {len(chunks)} synthesized")
 
     # Phase 3-H/I: chunk metadata + narrationData.ts (atomic、最後に書く)
-    cut_segments = load_cut_segments(fps)
+    # Codex Phase 3-I review P1 #2 反映: vad 部分破損は fail_fast で raise
+    # (legacy 経路で stale narration を出さないため)
+    try:
+        cut_segments = project_load_cut_segments(fps)
+    except (VadSchemaError, OSError, json.JSONDecodeError) as e:
+        print(
+            f"ERROR: vad_result.json schema invalid or unreadable: {e}",
+            file=sys.stderr,
+        )
+        # 全成果物を rollback (chunks + narration.wav)、narrationData は空のまま
+        for p in chunk_paths:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        if out_path.exists():
+            try:
+                out_path.unlink()
+            except OSError:
+                pass
+        return 8
     if cut_segments:
         print(f"cut-aware mapping: {len(cut_segments)} cut segments loaded from vad_result.json")
+
+    # Codex Phase 3-I review P3 #6 反映: chunk_paths と chunk_meta の長さ assert
+    assert len(chunk_paths) == len(chunk_meta), (
+        f"chunk_paths ({len(chunk_paths)}) と chunk_meta ({len(chunk_meta)}) の長さズレ"
+    )
     pairs = [
         (path, text, source_start, source_end)
         for path, (text, source_start, source_end) in zip(chunk_paths, chunk_meta)

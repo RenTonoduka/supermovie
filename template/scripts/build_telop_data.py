@@ -28,7 +28,11 @@ import tempfile
 from pathlib import Path
 
 PROJ = Path(__file__).resolve().parent.parent
-FPS = 60
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+from timeline import read_video_config_fps  # noqa: E402
+
+FPS = read_video_config_fps(PROJ)  # Phase 3-J: timeline 共通化、videoConfig.FPS と同期
 # Phase 1 短尺 (short) format 既定値、後段で project-config.json から読むよう拡張可能
 MAX_CHARS = 24
 MAX_CHARS_PER_LINE = 12
