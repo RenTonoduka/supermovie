@@ -805,6 +805,131 @@ def test_generate_slide_plan_api_invalid_json() -> None:
             gsp.PROJ = original_proj
 
 
+def test_build_slide_data_plan_validation_fallback() -> None:
+    """build_slide_data --plan で validate 失敗 → deterministic fallback (default).
+
+    Codex Phase 3-M review P2 #3 反映: API mock の出口に build_slide_data
+    を繋いで schema validation 経路まで踏む integration test。
+    """
+    import build_slide_data as bsd
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = _setup_temp_project(Path(tmp))
+        # 通常 transcript
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps(
+                {
+                    "duration_ms": 4000,
+                    "text": "test",
+                    "segments": [
+                        {"text": "hello", "start": 0, "end": 2000},
+                        {"text": "world", "start": 2000, "end": 4000},
+                    ],
+                    "words": [
+                        {"text": "hello", "start": 0, "end": 1000},
+                        {"text": "world", "start": 2000, "end": 3000},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (proj / "project-config.json").write_text(
+            json.dumps({"format": "short", "tone": "プロフェッショナル"}),
+            encoding="utf-8",
+        )
+        # 壊れた slide_plan: 必須 version 欠落
+        bad_plan = {
+            "slides": [
+                {
+                    "id": 1,
+                    "startWordIndex": 0,
+                    "endWordIndex": 1,
+                    "title": "test",
+                    "bullets": [],
+                    "align": "left",
+                }
+            ]
+        }
+        plan_path = proj / "bad_plan.json"
+        plan_path.write_text(json.dumps(bad_plan), encoding="utf-8")
+
+        original_proj = bsd.PROJ
+        bsd.PROJ = proj
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = [
+                "build_slide_data.py",
+                "--plan",
+                str(plan_path),
+                # default: validation 失敗で WARN + deterministic fallback
+            ]
+            try:
+                bsd.main()
+                # fallback 経路: deterministic で slideData.ts 生成
+                slide_ts = proj / "src" / "Slides" / "slideData.ts"
+                if not slide_ts.exists():
+                    raise AssertionError(
+                        f"slideData.ts not generated (fallback expected): {slide_ts}"
+                    )
+            finally:
+                _sys.argv = old_argv
+        finally:
+            bsd.PROJ = original_proj
+
+
+def test_build_slide_data_plan_strict_failure() -> None:
+    """build_slide_data --plan + --strict-plan で validate 失敗 → SystemExit 2."""
+    import build_slide_data as bsd
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = _setup_temp_project(Path(tmp))
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps(
+                {
+                    "duration_ms": 2000,
+                    "text": "test",
+                    "segments": [{"text": "hello", "start": 0, "end": 2000}],
+                    "words": [{"text": "hello", "start": 0, "end": 1000}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (proj / "project-config.json").write_text(
+            json.dumps({"format": "short", "tone": "プロ"}),
+            encoding="utf-8",
+        )
+        # 壊れた plan: version 欠落
+        bad_plan = {"slides": []}
+        plan_path = proj / "bad_plan.json"
+        plan_path.write_text(json.dumps(bad_plan), encoding="utf-8")
+
+        original_proj = bsd.PROJ
+        bsd.PROJ = proj
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = [
+                "build_slide_data.py",
+                "--plan",
+                str(plan_path),
+                "--strict-plan",
+            ]
+            try:
+                bsd.main()
+                raise AssertionError(
+                    "build_slide_data --strict-plan should fail with bad plan"
+                )
+            except SystemExit as e:
+                # exit code 2 期待 (strict-plan + validation error)
+                code = e.code if e.code is not None else 0
+                assert_eq(code, 2, "strict-plan validation failure → exit 2")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            bsd.PROJ = original_proj
+
+
 def test_build_scripts_wiring() -> None:
     """build_slide_data / build_telop_data が timeline 経由で正しく wire されている."""
     import importlib
@@ -869,6 +994,8 @@ def main() -> int:
         test_generate_slide_plan_api_mock_success,
         test_generate_slide_plan_api_http_error,
         test_generate_slide_plan_api_invalid_json,
+        test_build_slide_data_plan_validation_fallback,
+        test_build_slide_data_plan_strict_failure,
     ]
     failed = []
     for t in tests:
