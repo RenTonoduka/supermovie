@@ -1,4 +1,4 @@
-export { NarrationAudio } from './NarrationAudio';
+export { NarrationAudio, NarrationAudioWithMode } from './NarrationAudio';
 export { narrationData } from './narrationData';
 export {
   getNarrationMode,

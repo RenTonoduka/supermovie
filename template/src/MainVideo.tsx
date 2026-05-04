@@ -5,7 +5,7 @@ import { BGM } from './SoundEffects/BGM';
 import { ImageSequence } from './InsertImage';
 import { TitleSequence } from './Title';
 import { SlideSequence } from './Slides';
-import { NarrationAudio } from './Narration';
+import { NarrationAudioWithMode } from './Narration/NarrationAudio';
 import { useNarrationMode } from './Narration/useNarrationMode';
 import { VIDEO_FILE } from './videoConfig';
 
@@ -19,6 +19,8 @@ export const MainVideo: React.FC = () => {
   // Studio で voicevox_narration.py 実行 → narrationData.ts / chunk wav 更新で
   // watchStaticFile が発火、自動で React tree 再評価 (Cmd+R 不要)。
   // Player / render path では watchStaticFile が no-op になるため従来動作と同じ。
+  // Phase 3-V: hook を MainVideo 1 箇所で呼び、NarrationAudioWithMode に prop で
+  // 渡すことで watcher 二重登録を回避 (Codex CODEX_REVIEW_PHASE3U_AND_3V 推奨)。
   const narrationMode = useNarrationMode();
   const baseVolume = narrationMode.kind === 'none' ? 1.0 : 0;
 
@@ -48,7 +50,7 @@ export const MainVideo: React.FC = () => {
       <TitleSequence />
 
       {/* ナレーション (Phase 3-F asset gate、narration.wav 不在で null) */}
-      <NarrationAudio volume={1.0} />
+      <NarrationAudioWithMode volume={1.0} mode={narrationMode} />
 
       {/* BGM (Phase 3-F asset gate、bgm.mp3 不在で null) */}
       <BGM volume={0.08} />
