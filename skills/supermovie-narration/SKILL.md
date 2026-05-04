@@ -49,33 +49,49 @@ Roku が以下のいずれかで起動した後に実行:
 2. `--script-json <path>` で `{segments: [{text}]}` JSON 指定
 3. default: `<PROJECT>/transcript_fixed.json` の `segments[].text` を chunk
 
-## Phase 3: 合成 + 結合
+## Phase 3: 合成 + 結合 (Phase 3-D legacy + Phase 3-H per-segment)
 
 各 chunk について:
 1. `POST /audio_query?text=...&speaker=<id>` → query JSON
 2. `POST /synthesis?speaker=<id>` body=query → WAV bytes
 
-すべての chunk wav を時系列で結合し `public/narration.wav` を生成。
-`--keep-chunks` で chunk 個別 wav も保持 (debug)。
+**Phase 3-D legacy**: chunk wav を時系列で結合し `public/narration.wav` を生成。
+
+**Phase 3-H per-segment** (default、自動):
+- `public/narration/chunk_NNN.wav` を保持 (削除しない)
+- 各 chunk の wave header から実 duration 測定 → frame 換算
+- `src/Narration/narrationData.ts` を all-or-nothing で生成
+  (NarrationSegment[]: id / startFrame / durationInFrames / file / text)
+- `public/narration/chunk_meta.json` に fps + total_frames + segments[] を debug 出力
+- partial failure (途中 chunk synthesis 失敗) 時は `narrationData.ts` を空 array に
+  reset + 部分 chunk を削除 (二重音声 / 中途半端 timeline 防止)
+
+FPS は `--fps` 引数 → `<PROJECT>/project-config.json` の `source.fps.render_fps` →
+default 30 の優先順位で解決。
+
+stale chunk (前回実行の遺物) は synthesis 開始前に必ず cleanup。
 
 ## Phase 4: Remotion 接合 (asset gate、手動操作不要)
 
-Phase 3-F asset gate により `MainVideo.tsx` 編集は不要。
-`<NarrationAudio />` と base `<Video>` の両方が `getStaticFiles()` で
-`public/narration.wav` の有無を検出する:
+Phase 3-F asset gate + Phase 3-H per-segment Sequence により
+`MainVideo.tsx` 編集は不要。
 
-| narration.wav 状態 | NarrationAudio | base Video volume |
-|--------------------|----------------|-------------------|
-| 不在 | null (skip) | 1.0 (元音声再生) |
-| 存在 | `<Audio>` 再生 | 0 (mute、二重音声防止) |
+| 状態 | NarrationAudio | base Video volume |
+|------|----------------|-------------------|
+| narrationData 空 + narration.wav 不在 | null (skip) | 1.0 (元音声再生) |
+| narrationData 空 + narration.wav 存在 (Phase 3-D legacy) | 単一 `<Audio>` 再生 | 0 (mute) |
+| narrationData non-empty + 全 chunk 存在 (Phase 3-H) | `<Sequence from durationInFrames>` で chunk ループ | 0 (mute) |
 
-つまり `voicevox_narration.py` 成功 → `public/narration.wav` 出力 →
-次回 `npm run dev` / `npm run render` で自動的に narration 再生 + base mute に
-切り替わる。Roku の手作業ゼロ。
+優先順位は narrationData > narration.wav > null。
+`voicevox_narration.py` 成功 → `narrationData.ts` 上書き + chunk 配置 → 次回
+`npm run dev` / `npm run render` で自動的に per-segment narration 再生 + base mute
+に切り替わる。Roku の手作業ゼロ。
 
 実装参照:
-- `template/src/MainVideo.tsx` (`hasNarration` 判定 + `baseVolume`)
-- `template/src/Narration/NarrationAudio.tsx` (asset gate null フォールバック)
+- `template/src/MainVideo.tsx` (`hasLegacyNarration` + `hasChunkNarration` で `baseVolume` 判定)
+- `template/src/Narration/NarrationAudio.tsx` (narrationData / legacy / null の三経路 fallback)
+- `template/src/Narration/types.ts` (NarrationSegment 型)
+- `template/src/Narration/narrationData.ts` (script が all-or-nothing で書換)
 
 ## 実行コマンド
 
@@ -97,8 +113,10 @@ python3 <PROJECT>/scripts/voicevox_narration.py --require-engine
 
 ## 出力
 
-- `<PROJECT>/public/narration.wav` (本命、結合済)
-- (`--keep-chunks` 時) `<PROJECT>/public/narration/chunk_NNN.wav`
+- `<PROJECT>/public/narration.wav` (Phase 3-D legacy、結合済)
+- `<PROJECT>/public/narration/chunk_NNN.wav` (Phase 3-H、render 時に必要、常時保持)
+- `<PROJECT>/public/narration/chunk_meta.json` (debug、fps + segments[])
+- `<PROJECT>/src/Narration/narrationData.ts` (Phase 3-H render 駆動データ)
 
 ## エラーハンドリング
 
@@ -108,6 +126,7 @@ python3 <PROJECT>/scripts/voicevox_narration.py --require-engine
 | transcript_fixed.json 不在 | exit 3 (`--script` で迂回可) |
 | `/audio_query` HTTP エラー | chunk skip + WARN、全 chunk 失敗で exit 5 |
 | WAV 結合 format mismatch | chunk skip + WARN、可能な範囲で結合 |
+| partial chunk failure (--allow-partial なし) | exit 6、部分 chunk 削除 + narrationData.ts を空 array に reset |
 
 ## 連携マップ
 
