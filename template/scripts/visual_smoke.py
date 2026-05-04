@@ -28,13 +28,14 @@ Usage:
     python3 scripts/visual_smoke.py --formats youtube,short
     python3 scripts/visual_smoke.py --frames 30,90,180
     python3 scripts/visual_smoke.py --no-grid             # grid 合成 skip
-    python3 scripts/visual_smoke.py --keep-stills         # PNG 残す (default 残す)
 
 Exit code:
     0 = 全 still 出力 + dimension 一致
-    2 = 1 件以上 dimension mismatch (regression)
-    3 = remotion still / ffprobe / ffmpeg 実行失敗 (環境問題)
-    4 = videoConfig.ts 解析失敗 (FORMAT 行 regex 不一致)
+    2 = 1 件以上 dimension mismatch (regression、render は成功している)
+    3 = 実行環境問題 (main.mp4 不在 / node_modules 不在 / remotion still failed /
+         ffprobe failed / ffmpeg drawtext filter なし / grid 合成 failed)
+    4 = 入力 / 設定不正 (videoConfig.ts 不在 or FORMAT 行 regex 不一致 /
+         空 formats / 空 frames / 未知 format)
 """
 from __future__ import annotations
 
@@ -50,6 +51,8 @@ PROJ = Path(__file__).resolve().parent.parent
 VIDEO_CONFIG = PROJ / "src" / "videoConfig.ts"
 SMOKE_OUT = PROJ / "out" / "visual_smoke"
 COMPOSITION_ID = "MainVideo"
+MAIN_VIDEO = PROJ / "public" / "main.mp4"
+REMOTION_BIN = PROJ / "node_modules" / ".bin" / "remotion"
 
 FORMAT_DIMS = {
     "youtube": (1920, 1080),
@@ -114,11 +117,37 @@ def render_still(project: Path, frame: int, png_out: Path) -> None:
     )
 
 
-def make_grid(stills: list[Path], grid_out: Path, formats: list[str], frames: list[int]) -> None:
+def has_drawtext_filter() -> bool:
+    """ffmpeg build に drawtext filter (libfreetype) が含まれるか確認。
+
+    Mac Homebrew 標準 build は drawtext を持つが、minimal build では落ちている
+    ことがあるため事前検査する (Codex Phase 3-G review P1 #2 反映)。
+    """
+    try:
+        out = subprocess.check_output(
+            ["ffmpeg", "-hide_banner", "-filters"], text=True, stderr=subprocess.STDOUT
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+    for line in out.splitlines():
+        if " drawtext " in f" {line} ":
+            return True
+    return False
+
+
+def make_grid(
+    stills: list[Path],
+    grid_out: Path,
+    formats: list[str],
+    frames: list[int],
+    label: bool,
+) -> None:
     """ffmpeg で N(format) × M(frame) の grid を 1 PNG に合成。
 
-    ffmpeg filter_complex で hstack (frame 軸) → vstack (format 軸) する。
-    各 cell に format/frame ラベルを drawtext で焼き込み (debug 即見可).
+    呼び出し側で full matrix (len(stills) == n_fmt * n_frm) を保証すること
+    (部分失敗時の cell 対応崩れを防ぐ、Codex Phase 3-G P2 #5 反映)。
+    label=True の時は drawtext で format/frame を焼き込み、False の時は scale のみ
+    (drawtext filter 不在環境向け、Codex P1 #2 反映)。
     """
     if not stills:
         return
@@ -130,17 +159,19 @@ def make_grid(stills: list[Path], grid_out: Path, formats: list[str], frames: li
     n_fmt = len(formats)
     n_frm = len(frames)
     filter_parts: list[str] = []
-    # 各 cell をラベル付き thumb にスケーリング (短辺 360px に固定)
+    # 各 cell を thumb にスケーリング (短辺 360px に固定)、必要なら drawtext
     for i, s in enumerate(stills):
         fmt = formats[i // n_frm]
         frm = frames[i % n_frm]
-        label = f"{fmt} f{frm}"
-        # label 付きで scale
-        filter_parts.append(
-            f"[{i}:v]scale=-2:360,"
-            f"drawtext=text='{label}':fontcolor=white:fontsize=24:"
-            f"box=1:boxcolor=black@0.6:boxborderw=8:x=20:y=20[c{i}]"
-        )
+        if label:
+            txt = f"{fmt} f{frm}".replace("'", r"\'").replace(":", r"\:")
+            filter_parts.append(
+                f"[{i}:v]scale=-2:360,"
+                f"drawtext=text='{txt}':fontcolor=white:fontsize=24:"
+                f"box=1:boxcolor=black@0.6:boxborderw=8:x=20:y=20[c{i}]"
+            )
+        else:
+            filter_parts.append(f"[{i}:v]scale=-2:360[c{i}]")
 
     # 各 format 行の hstack
     row_labels: list[str] = []
@@ -192,20 +223,45 @@ def cli() -> int:
     args = ap.parse_args()
 
     formats = [f.strip() for f in args.formats.split(",") if f.strip()]
+    if not formats:
+        print("ERROR: --formats が空です (例: --formats youtube,short)", file=sys.stderr)
+        return 4
     for f in formats:
         if f not in FORMAT_DIMS:
             print(f"ERROR: 未知の format: {f} (許容: {','.join(FORMAT_DIMS)})", file=sys.stderr)
             return 4
     frames = [int(x) for x in args.frames.split(",") if x.strip()]
+    if not frames:
+        print("ERROR: --frames が空です (例: --frames 30,90)", file=sys.stderr)
+        return 4
+    if any(f < 0 for f in frames):
+        print(f"ERROR: --frames に負数: {frames}", file=sys.stderr)
+        return 4
 
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # 環境チェック
+    # 環境チェック (Codex Phase 3-G review P1 #1 反映、render 失敗を環境問題として早期検知)
     for tool in ("npx", "ffprobe", "ffmpeg"):
         if shutil.which(tool) is None:
             print(f"ERROR: {tool} コマンドが PATH にない", file=sys.stderr)
             return 3
+    if not MAIN_VIDEO.exists():
+        print(f"ERROR: base 動画が無い: {MAIN_VIDEO} (npm run visual-smoke は実 project で実行)", file=sys.stderr)
+        return 3
+    if not REMOTION_BIN.exists():
+        print(
+            f"ERROR: remotion CLI が無い: {REMOTION_BIN} "
+            f"(npm install を先に実行してください)",
+            file=sys.stderr,
+        )
+        return 3
+    grid_label = has_drawtext_filter()
+    if not grid_label and not args.no_grid:
+        print(
+            "INFO: ffmpeg drawtext filter なし、grid label を skip して画像のみ合成します",
+            file=sys.stderr,
+        )
 
     # videoConfig.ts 原本保持
     if not VIDEO_CONFIG.exists():
@@ -215,10 +271,13 @@ def cli() -> int:
 
     results: list[dict] = []
     stills: list[Path] = []
-    failed = 0
+    mismatched = 0  # dimension 不一致のみカウント (render/probe 失敗は exit 3 系で別扱い)
+    env_error: str | None = None
 
     try:
         for fmt in formats:
+            if env_error:
+                break
             try:
                 patched = patch_format(original, fmt)
             except ValueError as e:
@@ -231,28 +290,29 @@ def cli() -> int:
                 try:
                     render_still(PROJ, frame, png)
                 except subprocess.CalledProcessError as e:
+                    # P1 #1: render 失敗は環境問題 (exit 3) として即終了
                     print(
                         f"  ERROR: remotion still failed (fmt={fmt}, frame={frame}): {e}",
                         file=sys.stderr,
                     )
-                    failed += 1
+                    env_error = "still_failed"
                     results.append(
                         {"format": fmt, "frame": frame, "ok": False, "error": "still_failed"}
                     )
-                    continue
+                    break
                 try:
                     w, h = probe_dim(png)
                 except subprocess.CalledProcessError as e:
                     print(f"  ERROR: ffprobe failed for {png}: {e}", file=sys.stderr)
-                    failed += 1
+                    env_error = "probe_failed"
                     results.append(
                         {"format": fmt, "frame": frame, "ok": False, "error": "probe_failed"}
                     )
-                    continue
+                    break
                 expected = FORMAT_DIMS[fmt]
                 ok = (w, h) == expected
                 if not ok:
-                    failed += 1
+                    mismatched += 1
                 results.append(
                     {
                         "format": fmt,
@@ -273,13 +333,21 @@ def cli() -> int:
         VIDEO_CONFIG.write_text(original, encoding="utf-8")
         print(f"\n[smoke] videoConfig.ts を原本に restore しました")
 
-    if not args.no_grid and stills:
+    grid_status = "skipped"
+    grid_error: str | None = None
+    full_matrix = len(stills) == len(formats) * len(frames) and not env_error
+    if not args.no_grid and full_matrix:
+        # P2 #5: full matrix の時のみ grid (部分失敗時は cell 対応が崩れるため)
         grid_out = out_dir / "grid.png"
         try:
-            make_grid(stills, grid_out, formats, frames)
+            make_grid(stills, grid_out, formats, frames, label=grid_label)
             print(f"\n[smoke] grid: {grid_out}")
+            grid_status = "ok"
         except subprocess.CalledProcessError as e:
-            print(f"WARN: ffmpeg grid 合成失敗: {e}", file=sys.stderr)
+            # P1 #2: grid 失敗は環境問題として exit 3 (silent WARN にしない)
+            print(f"ERROR: ffmpeg grid 合成失敗: {e}", file=sys.stderr)
+            grid_status = "failed"
+            grid_error = str(e)
 
     summary_path = out_dir / "summary.json"
     summary_path.write_text(
@@ -288,8 +356,10 @@ def cli() -> int:
                 "formats": formats,
                 "frames": frames,
                 "results": results,
-                "failed": failed,
+                "mismatched": mismatched,
                 "total": len(results),
+                "env_error": env_error,
+                "grid": {"status": grid_status, "error": grid_error},
             },
             ensure_ascii=False,
             indent=2,
@@ -297,9 +367,13 @@ def cli() -> int:
         encoding="utf-8",
     )
     print(f"\nsummary: {summary_path}")
-    print(f"  total={len(results)}, failed={failed}")
+    print(f"  total={len(results)}, mismatched={mismatched}, env_error={env_error}, grid={grid_status}")
 
-    return 2 if failed else 0
+    if env_error or grid_status == "failed":
+        return 3
+    if mismatched:
+        return 2
+    return 0
 
 
 if __name__ == "__main__":

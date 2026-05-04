@@ -12,8 +12,12 @@ const NARRATION_FILE = 'narration.wav';
 
 export const MainVideo: React.FC = () => {
   // Phase 3-F asset gate と連動: narration.wav が存在すれば base 元音声を mute、
-  // 不在なら 1.0 で再生 (二重音声防止)。getStaticFiles は public/ 配下を返す
-  // Remotion 公式 API (https://www.remotion.dev/docs/get-static-files)。
+  // 不在なら 1.0 で再生 (二重音声防止)。getStaticFiles は Studio/render 時に
+  // public/ 配下の asset 一覧を返す Remotion 公式 API
+  // (https://www.remotion.dev/docs/getstaticfiles)。
+  // 注意: Studio 起動後に narration.wav を生成した場合、Studio をリロード
+  // (Cmd+R / `r` キー) しないと反映されない。新規 asset 追加には watchStaticFile
+  // を使う選択肢もあるが、現状は単純化のため reload 方式を採用。
   const hasNarration = getStaticFiles().some((f) => f.name === NARRATION_FILE);
   const baseVolume = hasNarration ? 0 : 1.0;
 

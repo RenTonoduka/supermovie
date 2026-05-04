@@ -32,7 +32,7 @@
     "lint": "eslint src && tsc",
     "visual-smoke": "python3 scripts/visual_smoke.py",
     "test:visual-smoke": "python3 scripts/visual_smoke.py",
-    "test": "npm run lint && npm run test:visual-smoke"
+    "test": "npm run lint"
   },
   "sideEffects": [
     "*.css"

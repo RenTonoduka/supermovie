@@ -116,10 +116,17 @@ python3 <PROJECT>/scripts/voicevox_narration.py --require-engine
     ↓ transcript_fixed.json
 /supermovie-narration         ← ★ここ: VOICEVOX で narration.wav 生成
     ↓ public/narration.wav
-MainVideo.tsx <NarrationAudio /> 有効化
+MainVideo.tsx が public/narration.wav を自動検出 (asset gate)
+    └ NarrationAudio: <Audio src=narration.wav /> マウント
+    └ base Video: volume=0 に切替 (二重音声防止)
     ↓
 npm run render
 ```
+
+**Studio を開いたまま narration.wav を生成した場合は再読み込み推奨**:
+`getStaticFiles()` は Studio 起動時の asset リストをキャッシュするため、
+新規ファイルは Studio reload (Cmd+R / `r` キー) で反映される
+(出典 https://www.remotion.dev/docs/getstaticfiles)。
 
 ## VOICEVOX 利用規約
 
