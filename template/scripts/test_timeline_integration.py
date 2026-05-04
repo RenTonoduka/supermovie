@@ -424,6 +424,116 @@ def test_build_slide_data_validates_bad_transcript() -> None:
             bsd.PROJ = original_proj
 
 
+def test_build_telop_data_main_e2e() -> None:
+    """build_telop_data.py を temp project で main() 実行、call_budoux stub.
+
+    Codex Phase 3-L 推奨 vi 拡張 (Phase 3-M 候補 i): build_telop も e2e。
+    Node 依存の budoux_split.mjs は deterministic stub に差し替え。
+    """
+    import build_telop_data as btd
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = _setup_temp_project(Path(tmp))
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps(
+                {
+                    "duration_ms": 5000,
+                    "text": "test",
+                    "segments": [
+                        {"text": "こんにちは世界", "start": 0, "end": 2000},
+                        {"text": "さようなら空", "start": 2000, "end": 4000},
+                    ],
+                    "words": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (proj / "vad_result.json").write_text(
+            json.dumps(
+                {"speech_segments": [{"start": 0, "end": 4000}]}
+            ),
+            encoding="utf-8",
+        )
+
+        # call_budoux stub: text を 4文字毎に分割した phrases に変換
+        def stub_call_budoux(seg_texts):
+            return [
+                [t[i : i + 4] for i in range(0, len(t), 4)] or [t]
+                for t in seg_texts
+            ]
+
+        original_proj = btd.PROJ
+        original_call = btd.call_budoux
+        btd.PROJ = proj
+        btd.call_budoux = stub_call_budoux
+        try:
+            import sys as _sys
+
+            old_argv = _sys.argv
+            _sys.argv = ["build_telop_data.py"]
+            try:
+                btd.main()
+            finally:
+                _sys.argv = old_argv
+            # telopData.ts が生成されたか
+            telop_ts = proj / "src" / "テロップテンプレート" / "telopData.ts"
+            if not telop_ts.exists():
+                raise AssertionError(f"telopData.ts not generated at {telop_ts}")
+            content = telop_ts.read_text(encoding="utf-8")
+            if "telopData" not in content:
+                raise AssertionError(
+                    f"telopData.ts does not export telopData: {content[:100]}"
+                )
+        finally:
+            btd.PROJ = original_proj
+            btd.call_budoux = original_call
+
+
+def test_build_telop_data_validates_bad_transcript() -> None:
+    """build_telop_data.py が壊れた transcript で SystemExit する."""
+    import build_telop_data as btd
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = _setup_temp_project(Path(tmp))
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps(
+                {
+                    "segments": [{"text": "hi", "start": 1000, "end": 500}],
+                    "words": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (proj / "vad_result.json").write_text(
+            json.dumps({"speech_segments": [{"start": 0, "end": 1000}]}),
+            encoding="utf-8",
+        )
+
+        original_proj = btd.PROJ
+        original_call = btd.call_budoux
+        btd.PROJ = proj
+        # call_budoux stub (validation 前で raise されるので invoke されない想定)
+        btd.call_budoux = lambda x: [["dummy"] for _ in x]
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["build_telop_data.py"]
+            try:
+                btd.main()
+                raise AssertionError(
+                    "build_telop_data should fail with bad transcript"
+                )
+            except SystemExit as e:
+                msg = str(e)
+                if "transcript validation failed" not in msg:
+                    raise AssertionError(f"Expected validation error, got: {msg}")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            btd.PROJ = original_proj
+            btd.call_budoux = original_call
+
+
 def test_build_scripts_wiring() -> None:
     """build_slide_data / build_telop_data が timeline 経由で正しく wire されている."""
     import importlib
@@ -481,6 +591,8 @@ def main() -> int:
         test_build_scripts_wiring,
         test_build_slide_data_main_e2e,
         test_build_slide_data_validates_bad_transcript,
+        test_build_telop_data_main_e2e,
+        test_build_telop_data_validates_bad_transcript,
     ]
     failed = []
     for t in tests:
