@@ -13,3 +13,5 @@ dist/
 credentials.*
 transcript_audio.wav
 .venv/
+__pycache__/
+*.pyc
