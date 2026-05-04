@@ -314,18 +314,36 @@ short:   「動画編集を自動化する」(10文字) → 10/4 + 0.5 = 3.0秒
 
 ---
 
-## Phase 5: スタイル自動割り当て
+## Phase 5: スタイル + templateId 自動割り当て (Phase 2 で registry 統合)
 
-### 5-1. スタイル配分テーブル
+**Codex Phase 2 design 推奨 (2026-05-04): LLM は意味分割のみ、style 判定は deterministic、templateId は config lookup。**
 
-| 判定条件 | style | animation | 比率目安 | template |
-|---------|-------|-----------|---------|---------|
+### 5-0. style → templateId 解決ロジック
+
+各 telop に **`style`** (deterministic 判定、後述 5-1) と **`templateId`** (registry 参照) の両方を出力する。
+templateId は project-config.json の `telopStyle.{main, emphasis, negative}` (displayName) を `findTemplateIdByDisplayName()` (`telopTemplateRegistry.tsx`) で解決する。
+
+| style | telopStyle 参照先 | 例 (デフォルト) |
+|-------|-------------------|-----------------|
+| `normal` | `telopStyle.main` | `'WhiteBlueTeleopV2'` (= 白青テロップver2) |
+| `emphasis` | `telopStyle.emphasis` | `'OrangeGradation'` |
+| `warning` | `telopStyle.negative` | `'BlackPurpleGradation'` |
+| `success` | `telopStyle.emphasis` (fallback、SE では別 SE 扱い) | `'OrangeGradation'` |
+
+`success` は `style` フィールドとして残す (supermovie-se が SE 選択で別 sound 扱い)。templateId は emphasis と同じ。
+
+### 5-1. スタイル配分テーブル (deterministic 判定)
+
+| 判定条件 | style | animation | 比率目安 | legacy template |
+|---------|-------|-----------|---------|-----------------|
 | 通常の文 | normal | fadeOnly | 60-70% | 2 |
 | 疑問文（？） | normal | slideIn | 5-10% | 2 |
 | 強調キーワード含む | emphasis | slideIn | 10-15% | 1 or 6 |
 | ネガティブ表現 | warning | slideIn | 5-10% | 4 or 5 |
 | ポジティブ表現 | success | fadeOnly | 5-10% | 3 |
 | 最重要メッセージ | emphasis | charByChar | 1-3% | 1 |
+
+**legacy `template` (1..6) は telopId が解決できない時の fallback として TelopSegment にも残す**。templateId が指定されていれば TelopPlayer が registry 経路を優先する (`telopTypes.ts` 参照)。
 
 ### 5-2. キーワード辞書
 
