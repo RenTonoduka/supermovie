@@ -164,7 +164,9 @@ if [ ! -f "$PROTECT_FILE" ]; then
     exit 1
 fi
 
-# protect list を rsync filter rule に変換 (deletion protection 用)
+# protect list を rsync filter rule に変換 (apply 時の deletion protection 用)
+# dry-run scan では filter なしで走らせる (P filter を渡すと protected path の
+# deletion 候補がログから消えて violation 検出できない P0 問題、Codex review 16:49 指摘)
 PROTECT_RULES=()
 PROTECT_PATTERNS=()
 while IFS= read -r line; do
@@ -175,22 +177,29 @@ while IFS= read -r line; do
     PROTECT_PATTERNS+=("$line")
 done < "$PROTECT_FILE"
 
-# --- dry-run safety scan (常に走る) ---
+# --- dry-run safety scan (常に走る、P filter なしで full operation を全列挙) ---
 
 echo "[safe_rsync] === dry-run safety scan ==="
 echo "  source: $ABS_SOURCE/"
 echo "  dest:   $ABS_DEST/"
-echo "  protect: $PROTECT_FILE (${#PROTECT_PATTERNS[@]} patterns)"
+echo "  protect: $PROTECT_FILE (${#PROTECT_PATTERNS[@]} patterns、apply 時のみ filter 適用)"
 echo "  backup: $ABS_BACKUP_DIR (apply 時のみ作成)"
 echo
 
 DRY_RUN_LOG="$(mktemp)"
 trap 'rm -f "$DRY_RUN_LOG"' EXIT
 
-# itemize-changes で全 update/delete/overwrite を出力
-# --delete を含めて scan、protect は P filter で適用
+# itemize-changes で全 update/delete/overwrite を出力 (P filter なし、純粋 operation 列挙)
+# protect 違反検出は次の grep ループで実施。P0 fix: P filter を dry-run に渡すと
+# protected path の deletion 候補がログから消えて exit 4 にならない穴があるため
+# (Codex review bcm0q2k52 16:49 指摘、`.gitignore` の `*deleting` が P filter で消える実測)
+#
+# sentinel `.supermovie-sandbox` は `--exclude` で rsync 自体から完全除外:
+# source 側に sentinel がないのが通常運用 (sentinel は dest 限定の sandbox 印)、
+# protect list で扱うと sanity sync でも常時 violation 発生する設計 mistake のため
+# (self-test 16:52 で sanity test が常時 fail する問題で発覚)
 rsync -avcn --delete --itemize-changes \
-    "${PROTECT_RULES[@]}" \
+    --exclude="$SENTINEL" \
     "$ABS_SOURCE/" "$ABS_DEST/" > "$DRY_RUN_LOG" 2>&1 || {
     echo "[safe_rsync] FAIL: rsync dry-run exit non-zero" >&2
     cat "$DRY_RUN_LOG" >&2
@@ -244,6 +253,7 @@ echo
 
 rsync -av --delete \
     --backup --backup-dir="$ABS_BACKUP_DIR" \
+    --exclude="$SENTINEL" \
     "${PROTECT_RULES[@]}" \
     "$ABS_SOURCE/" "$ABS_DEST/" || {
     echo "[safe_rsync] FAIL: rsync apply exit non-zero" >&2
