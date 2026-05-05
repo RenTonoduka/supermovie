@@ -1,14 +1,14 @@
 # SuperMovie Phase 3 Release Note (2026-05-04 → 2026-05-05)
 
-`roku/phase3j-timeline` HEAD: `4528a6b` (Codex CODEX_REVIEW_PHASE3V_FINAL 20260505T064250
+`roku/phase3j-timeline` source commit HEAD: `4e21826` (anchor 自身の document commit は drift 1 intrinsic、CONTEXT_ANCHOR.md §Source commit vs Document commit 規約 参照) (Codex CODEX_REVIEW_PHASE3V_FINAL 20260505T064250
 で「P0/P1/P2 なし、Phase 3-V production 品質で止めてよい」 verdict 後、post-freeze
 backlog 第 1〜3 弾 + P3 logging extension + Codex 4 cycle re-review (P5/2nd-batch/P2/P3-slide-plan
 全 P0/P1 NONE) を反映、Codex CODEX_FULL_SESSION_REVIEW 20260505T113913 で「過剰実装、
 P5 sentinel 以降は黄信号」と判定)
 
 Phase 3-A 〜 Phase 3-V の自走実装結果 + 後続 post-freeze backlog 第 1〜3 弾。本 note は
-Roku 不在モード中に Claude+Codex 協働で 107 commit (`roku/phase3i-transcript-alignment..HEAD`、
-main..HEAD は 125 commit、Bash 実測) を積んだ成果物の release assertion を固定する目的。
+Roku 不在モード中に Claude+Codex 協働で 108 commit (`roku/phase3i-transcript-alignment..HEAD`、
+main..HEAD は 126 commit、Bash 実測) を積んだ成果物の release assertion を固定する目的。
 
 ## Release-readiness statement (2026-05-05 時点、技術 readiness のみ)
 
@@ -18,14 +18,14 @@ main..HEAD は 125 commit、Bash 実測) を積んだ成果物の release assert
 | pure python integration smoke (`test:timeline`) | ✅ 43/43 pass (Phase 3 23 + post-freeze 20: sentinel 4 + visual_smoke 4 + json-log 3 + cli mismatch 1 + cost guard 5 + review regression 2 + slide-plan json-log 1) |
 | TypeScript lint / tsc (`npm run lint`) | ✅ exit 0 (errors 0、warnings 0、`no-explicit-any` error 化済) |
 | React component test (`npm run test:react`) | ✅ 22/22 pass (vitest + jsdom + RTL、4 + 10 + 5 + 3) |
-| docs vs git log drift (`regen_phase3_progress.sh --verify`) | ✅ exit 0 (drift 1 = self-reference 許容内) |
+| docs vs git log drift (`regen_phase3_progress.sh --verify`) | ✅ exit 0 (drift 1 = anchor document commit による intrinsic、CONTEXT_ANCHOR.md §Source commit vs Document commit 規約) |
 | worktree clean | ✅ untracked なし |
 | 実 project visual-smoke / render e2e | [未検証] (Roku 判断領域、main.mp4 fixture 必要) |
 
 Roku 判断領域 (release blocker 候補):
 - ★ PR / merge 戦略: phase3f→g→h→i→j は ancestry 連結済み、技術的に階層 merge
   不要。Codex 推奨は `roku/phase3j-timeline` を 1 PR / squash merge。`main..HEAD`
-  は 125 commits (Bash 実測)、PR diff は phase3i..HEAD の 107 commits より大きく見える点に注意。
+  は 126 commits (Bash 実測)、PR diff は phase3i..HEAD の 108 commits より大きく見える点に注意。
   upstream `RenTonoduka/supermovie` (Roku 所有でない、現 gh account `blessing1031r-dotcom`
   は READ only、Bash 実測) のため Codex 推奨は **Option A: fork → blessing1031r-dotcom →
   upstream PR** (CODEX_FULL_SESSION_REVIEW 20260505T113913 §推奨理由、release branch 外、commit history で参照可)。

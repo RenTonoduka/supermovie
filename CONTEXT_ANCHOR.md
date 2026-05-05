@@ -12,12 +12,12 @@
 
 ## Verified Snapshot (作成時点で Bash 実測、push/PR 前に再更新)
 
-| 項目 | 値 (Bash 実測 2026-05-05 12:41) |
+| 項目 | 値 (Bash 実測 2026-05-05 12:55) |
 |---|---|
-| HEAD | `4528a6b` |
+| HEAD (source commit) | `4e21826` (anchor 自身の document commit はこの後ろに 1 件積まれる、§Source commit vs Document commit 規約 参照) |
 | branch | `roku/phase3j-timeline` |
-| main..HEAD | 125 commits |
-| roku/phase3i-transcript-alignment..HEAD | 107 commits |
+| main..HEAD | 126 commits |
+| roku/phase3i-transcript-alignment..HEAD | 108 commits |
 | origin remote | `https://github.com/RenTonoduka/supermovie.git` |
 | origin viewerPermission | READ (Roku gh account `blessing1031r-dotcom` は write 権限なし) |
 | fork remote | 不在 (`git remote get-url fork` で error: No such remote、Step 6 で `gh repo fork` 後に `git remote add fork` 予定) |
@@ -96,7 +96,36 @@ Codex review prompt の先頭で必ず本 anchor を参照させる:
 ```
 まず `/CONTEXT_ANCHOR.md` を読み、Verified Snapshot / Release PR Scope / Required Gates / External Actions が現状と整合しているか確認してください。
 欠落 / stale なら P1 (High) で指摘し、本 review の他項目より優先して fix を促してください。
+ただし drift 1 (anchor 自身の document commit が source commit の後ろに 1 つ積まれた intrinsic gap) は P1 扱いしない。詳細は §Source commit vs Document commit 規約 参照。
 ```
+
+## Source commit vs Document commit 規約 (drift 1 intrinsic / drift 2+ stale 機械判定、Codex 12:54 consult 推奨)
+
+本 anchor §Verified Snapshot の `HEAD` は **source commit** を指す。anchor 自身の commit (= document commit) は含まない。これは `scripts/regen_phase3_progress.sh` と同じ off-by-one 設計で、Codex 12:08 命令「自己参照 commit hash は完全一致できない、PR body では必ず push 直前の Bash 実測値を使う」と整合。
+
+| 用語 | 定義 |
+|---|---|
+| **source commit** | release assertion を指す最新の non-anchor commit (release scope 内の最終 code / docs commit、anchor 自身を除く) |
+| **document commit** | anchor 自身 / release note / progress を refresh する docs commit |
+| **drift** | `git rev-list <source_commit>..HEAD --count` (HEAD と source commit の差分 commit 数) |
+
+**判定 rule**:
+
+| drift | 状態 | Codex review verdict |
+|---|---|---|
+| 0 | anchor commit 前 (regen 中など過渡状態) | OK (anchor 未 publish) |
+| **1** | anchor 自身の document commit が source commit の後ろに 1 つ積まれた状態 | **intrinsic、P1 扱いしない** |
+| **≥2** | source commit の後に code / docs commit が 2 つ以上積まれた状態 | **stale、P1 扱い、anchor refresh 必要** |
+
+**機械判定 sketch** (将来 `check_release_ready.sh` に組み込む候補、別 PR scope、Task #9):
+```bash
+SOURCE_COMMIT=$(awk '/^\| HEAD/ {gsub(/[^a-f0-9]/, "", $5); print $5; exit}' CONTEXT_ANCHOR.md)
+DRIFT=$(git rev-list ${SOURCE_COMMIT}..HEAD --count)
+DOCS_ONLY=$(git diff --name-only ${SOURCE_COMMIT}..HEAD | grep -vE '^(CONTEXT_ANCHOR\.md|docs/)' | wc -l)
+[ "$DRIFT" -le 1 ] && [ "$DOCS_ONLY" -eq 0 ]   # true なら intrinsic / 安全
+```
+
+drift > 1 で docs-only でも stale。drift = 1 でも source の後に code commit があれば (= `DOCS_ONLY` > 0) stale 扱い。
 
 ## 更新責任
 
