@@ -153,7 +153,7 @@
 | ツール | 種別 | コスト | 品質 | 統合難度 | 既存 supermovie 連携 |
 |---|---|---|---|---|---|
 | VOICEVOX | OSS local | 0 | 中: local TTS として既存採用済み | 低: 既存 script | 既存 (Phase 3-D で統合済、template/scripts/voicevox_narration.py) |
-| Style-Bert-VITS2 | OSS local | self-host GPU / API 価格なし | 中(暫定): voice model 管理が品質依存 | 高: model / GPU / rights 管理 | 別途 infra |
+| Style-Bert-VITS2 | OSS local | self-host GPU / API 価格なし [一次情報未確認、Phase 6 着手時に Roku + Codex で再 consult] | 中(暫定、公開ベンチ未確認): voice model 管理が品質依存 | 高: model / GPU / rights 管理 | 別途 infra (現時点で採用済みでない、暫定候補) |
 | ElevenLabs | 商用 API | Free $0/10k credits、Starter $6/30k credits、Creator $11/121k credits、Pro $99/600k credits。API 追加費なしで credits 消費 [S25][S26] | 高(暫定): 商用品質、voice cloning あり | 低: API key + credits | 拡張 narration mode 候補 |
 | OpenAI TTS | 商用 API | gpt-4o-mini-tts: text input $0.60/1M tokens、audio output $12/1M tokens [S27] | 高(暫定): 13 voices、instructions で tone / speed 等制御 [S28] | 低: `/v1/audio/speech` | fallback / prototype 候補 |
 
