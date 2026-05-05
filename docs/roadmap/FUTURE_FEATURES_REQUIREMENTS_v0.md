@@ -2,14 +2,14 @@
 
 本 doc は Roku 発言 (前セッション 869aaf03-...jsonl 2026-05-04T06:58 実測) を起点に、Phase 3-V release-ready 後の未着手 scope を整理する v0 draft。
 
-**v0 構造**: 構造 + 範囲 + roadmap 骨子 + リスク framework は Claude 起草で verify 済み、詳細技術選定 (各ツールの benchmark / コスト / OSS active 度 / 法規制現状) は **[要 Codex 補完]** marker、後続 bg consult 経由で v0.1 で埋める方針。
+**v0 構造**: 構造 + 範囲 + roadmap 骨子 + リスク framework は Claude 起草で verify 済み。詳細技術選定 (§4) と既知の罠 / 過去事例 / 法規制現状 (§7) は Codex fill-in 反映済 (794e3bc、35 一次情報 [S1]-[S35] citation 付き)。残 [要 Codex 補完] marker は §2 Phase 単位 API 課金見積のみで、各 Phase 着手判断時に再 consult する方針。
 
 ## 0. メタ情報
 
-- **作成**: 2026-05-05 09:35 (Claude 起草、Codex 補完 pending)
-- **HEAD reference**: `roku/phase3j-timeline` `21dd075` (Phase 3-V release-ready + post-freeze backlog P1-P4 反映済)
+- **作成**: 2026-05-05 09:35 (Claude 起草) / **Codex fill-in 反映**: 2026-05-05 09:51 (CODEX_FUTURE_FILLIN_20260505T094327.md → 794e3bc 経由 §4/§7 + §9 References)
+- **HEAD reference**: `roku/phase3j-timeline` `a85bdb1` (Phase 3-V release-ready + post-freeze backlog P1-P4 + v0 fill-in + drift fix 全反映済)
 - **位置**: `docs/roadmap/FUTURE_FEATURES_REQUIREMENTS_v0.md` (Phase 3 release 済み artifact と分離)
-- **next review**: Codex で §4 / §7 fill-in 後、Roku で §6 判断
+- **next review**: §6 オープンクエスチョン 7 件への Roku 判断 / §2 Phase 単位 API 課金見積の再 consult (各 Phase 着手判断時)
 
 ## 1. 目的とスコープ境界
 
@@ -164,7 +164,7 @@
 - AI アバター (SadTalker / HeyGen 等) は **deepfake 規制** に抵触する可能性 (国・州ごとに異なる、要法務相談)
 - 生成画像 / 生成動画の **著作権 / 商用利用条件** は各 API ToS で確認必要
 - 教材コンテンツの **本人許諾** (アバター話者として誰の顔を使うか)
-- [要 Codex 補完]: 現行法 (US / EU / JP / 中国) の deepfake 規制比較
+- 現行法 (US TAKE IT DOWN Act / EU AI Act Article 50 / JP AI 事業者ガイドライン) の deepfake 規制詳細は §7 で整理済 [S31]-[S35]、中国は §7 範囲外 (要追加 consult)
 
 ### 5.2 モラル
 
@@ -207,7 +207,7 @@
 
 ## 8. 次ステップ
 
-- [x] Codex consult で §4 / §7 の [要 Codex 補完] を埋める (CODEX_FUTURE_FILLIN_20260505T094327.md、commit 9c1c3f0 系列で integrate 予定)
+- [x] Codex consult で §4 / §7 の [要 Codex 補完] を埋める (CODEX_FUTURE_FILLIN_20260505T094327.md → 794e3bc + a85bdb1 で integrate)
 - [ ] Roku 復帰時に §6 オープンクエスチョン 7 件への判断を求める
 - [ ] Phase 4 開始判断は §6 Q1 / Q3 / Q4 確定後
 - [ ] §4 / §7 の二次レビュー (法務確認・実装着手前の price tier 再確認)
