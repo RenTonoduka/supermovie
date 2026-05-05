@@ -65,7 +65,7 @@ main
 
 ### Phase 3-K (smoke test, on roku/phase3j-timeline)
 - `template/scripts/test_timeline_integration.py`: 14 test ケース
-- `template/package.json`: `test:timeline` script、`test = lint + test:timeline`
+- `template/package.json`: `test:timeline` / `test:react` script、`test = lint && test:timeline && test:react` (Phase 3-S 以降 React vitest も統合)
 - `CLAUDE.md` に Visual Smoke + Timeline Test 節
 - transcript validation を build_slide / build_telop にも展開 (require_timing=True)
 
@@ -253,5 +253,7 @@ npm run visual-smoke   # 実 main.mp4 + node_modules 必要、3 format × 2 fram
 cost guard 5 + P2 review regression 2 + slide-plan json-log 1 累積、最新 P3 logging extension
 反映時点) で timeline.py / 4 script + visual_smoke の連鎖を engine 不要で高速検証 (新規
 commit 後の regression 早期検出用)。test 一覧は `scripts/test_timeline_integration.py` の
-`main()` 末尾参照。`npm run test = lint + test:timeline` は package.json の script 定義経由
-(React test は test:react として別 script、6 gate composite で別 step)。
+`main()` 末尾参照。`npm run test` は実際には `lint && test:timeline && test:react` を順次
+実行 (template/package.json:41 で確認、Phase 3-S 以降 React vitest も統合)。test:react は
+`vitest run --config vitest.config.ts` 経由で 22 React test 実行 (旧説明「別 script」表記を
+更新)。
