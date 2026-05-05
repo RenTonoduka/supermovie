@@ -130,7 +130,7 @@ current state (v0) は `generate_slide_plan.py` / `voicevox_narration.py` が `s
 - provider_response_body (LLM API の raw response):
   - **stderr であっても default は raw 禁止** (request_id / status_code / token_usage の structured summary のみ出す)。raw body は `--unsafe-dump-response` 等 debug opt-in flag 時に限定。
   - secret-bearing header (Authorization / x-api-key 等) は事前 strip。
-  - 現 `generate_slide_plan.py:347` (HTTP error response body) と `:366` (LLM raw text on JSON parse error) は stderr 経由で raw を出している経路で、migration 対象。
+  - 現 `generate_slide_plan.py:347` (HTTP error response body) / `:351` (non-429 HTTP error で `body[:500]` partial を stderr 出力) / `:366` (LLM raw text on JSON parse error) は stderr 経由で raw を出している経路で、migration 対象。
   - migration test 必須事項: HTTP body / LLM raw text を含む test fixture で、default emission に raw が現れず、`--unsafe-dump-response` 指定時のみ出ることを `test_timeline_integration.py` で regression test 化する。
 
 ### Path Policy
