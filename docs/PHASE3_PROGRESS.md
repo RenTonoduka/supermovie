@@ -1,6 +1,6 @@
-# SuperMovie Phase 3 Progress (2026-05-04)
+# SuperMovie Phase 3 Progress (2026-05-04 → 2026-05-05)
 
-Phase 3-A 〜 Phase 3-O の commit 集約と Codex review 履歴。次セッション着手前の状態把握用。
+Phase 3-A 〜 Phase 3-V + post-freeze 第 1〜3 弾の commit 集約と Codex review 履歴。次セッション着手前の状態把握用。
 
 `docs/PHASE3_PROGRESS.md` は `scripts/regen_phase3_progress.sh` で commit chain
 section が auto-gen される。本文 (Phase 別 deliverable / Codex review 履歴 / 残候補)
@@ -129,7 +129,8 @@ main
 
 ### Roku 判断領域 (deploy / 段取り / 課金 / 法的)
 - ★ PR / merge 戦略 (roku/phase3j-timeline は phase3i / phase3h / phase3g / phase3f を
-  順次 merge する必要あり、複数分岐を 1 PR に潰すか段階 merge にするか)
+  ancestry 連結済み、`git merge-base --is-ancestor` 各 branch → HEAD で exit 0 確認済。
+  Codex 推奨は 1 PR / squash merge / fork → upstream PR、CONTEXT_ANCHOR.md §External Actions 参照)
 - Phase 3-G visual_smoke を実 project で end-to-end 検証 (main.mp4 fixture 必要)
 - CI 整備 (GitHub Actions / 別 CI provider、test:timeline + lint 自動化)
 - slide_plan.v2 + scene_plan 統合 (Anthropic API 課金)
@@ -137,9 +138,10 @@ main
 - supermovie-se 統合 (素材判断)
 - SadTalker / HeyGen / Kling 統合 (法的 / モラルリスク + API 課金)
 
-## 全 commit count (roku/phase3j-timeline branch、最新 104 件)
+## 全 commit count (roku/phase3j-timeline branch、最新 105 件)
 
 ```
+bfeb5ad docs(phase3): refresh anchor + release note to 31dd9cc / 122 commits + remove stale reviews/ tree + PROGRESS regen (drift 1 intrinsic)
 31dd9cc docs(phase3): PROGRESS auto-regen for stale ref fix commit (drift 1)
 264636f docs(phase3): replace stale CODEX artifact path references with branch+commit format
 8517307 docs(phase3): refresh anchor + release note + progress to e0f5107 (main..HEAD 119)
@@ -246,7 +248,7 @@ e2a1a39 fix(timeline): Codex Phase 3-J review 4 件 fix (P1×1 + P2×2 + P3×1)
 66e2aeb feat(timeline): timeline.py 共通化 + Phase 3-I review 6 件 fix (Phase 3-J)
 ```
 
-(更新: 2026-05-05_12:31、source=HEAD、`scripts/regen_phase3_progress.sh` で auto-gen。
+(更新: 2026-05-05_12:36、source=HEAD、`scripts/regen_phase3_progress.sh` で auto-gen。
 本 script で regen → docs commit する形のため、docs 上の commit chain は
 docs commit を作る前の HEAD を反映する設計 (off-by-one は intrinsic、
 `--verify` mode で count drift を CI 検査可)。)

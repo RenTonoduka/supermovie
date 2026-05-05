@@ -15,7 +15,7 @@ main..HEAD は 122 commit、Bash 実測) を積んだ成果物の release assert
 | 項目 | 状態 |
 |---|---|
 | code 側 P0/P1/P2 (Codex 22+ + post-freeze re-review 通過) | ✅ ゼロ |
-| pure python integration smoke (`test:timeline`) | ✅ 27/27 pass (Phase 3 + post-freeze edge case 3 + voicevox sentinel 4) |
+| pure python integration smoke (`test:timeline`) | ✅ 43/43 pass (Phase 3 23 + post-freeze 20: sentinel 4 + visual_smoke 4 + json-log 3 + cli mismatch 1 + cost guard 5 + review regression 2 + slide-plan json-log 1) |
 | TypeScript lint / tsc (`npm run lint`) | ✅ exit 0 (errors 0、warnings 0、`no-explicit-any` error 化済) |
 | React component test (`npm run test:react`) | ✅ 22/22 pass (vitest + jsdom + RTL、4 + 10 + 5 + 3) |
 | docs vs git log drift (`regen_phase3_progress.sh --verify`) | ✅ exit 0 (drift 1 = self-reference 許容内) |
