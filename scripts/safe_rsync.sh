@@ -198,7 +198,7 @@ trap 'rm -f "$DRY_RUN_LOG"' EXIT
 # source 側に sentinel がないのが通常運用 (sentinel は dest 限定の sandbox 印)、
 # protect list で扱うと sanity sync でも常時 violation 発生する設計 mistake のため
 # (self-test 16:52 で sanity test が常時 fail する問題で発覚)
-rsync -avcn --delete --itemize-changes \
+rsync -avcn --delete --itemize-changes --8-bit-output \
     --exclude="$SENTINEL" \
     "$ABS_SOURCE/" "$ABS_DEST/" > "$DRY_RUN_LOG" 2>&1 || {
     echo "[safe_rsync] FAIL: rsync dry-run exit non-zero" >&2
