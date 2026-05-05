@@ -6130,6 +6130,106 @@ def test_observability_build_status_category_override_defensive_lint() -> None:
             )
 
 
+def test_observability_docs_migration_steps_numbering() -> None:
+    """`docs/OBSERVABILITY.md §Migration steps` の step 番号 contract lint
+    (Codex 05:11 PR-AV verdict BC、observability migration 履歴 docs drift 防止)。
+
+    `### Migration steps (完了履歴)` table は手書きで step 1..N を順に append
+    する運用 (PR #3 で 1..4 から始まり、PR-AU で 47 まで成長)。後続 PR で:
+
+      - 同じ step 番号を 2 回書く (重複): downstream の PR ↔ step 紐付けが
+        曖昧になり、release note や handoff の引用が壊れる
+      - 番号を skip (例: 47 → 49): backfill 漏れ / 連番 audit 不能
+      - 1 から始まらない: 初手の table 構造破壊
+
+    上記 3 drift + 追加の row 順序入れ替え (例: step 5 を step 4 の上に動かす)
+    を機械的に検出する lint。table 行 `| <int> | <内容> | <PR> |` を正規表現
+    で抽出し、(1) 抽出件数 ≥ 1、(2) 重複なし、(3) 出現順そのものが 1..N
+    (`step_numbers == list(range(1, N+1))`、Codex 05:14 P2 fix で sorted
+    比較から append-only 契約強化へ tighten) を assert。Migration steps
+    section の境界は `### Migration steps` 開始 ～ 次の `^## ` 開始まで
+    (現状 `## Test Requirements`) で区切る。
+
+    既存 lint 系 (PR-M `--unsafe-keep-abs-path` flag audit / PR-P entry exit
+    code propagation / PR-T STATUS_MAP static / PR-AN STATUS_MAP category
+    format) と同 level の docs/static lint。
+    """
+    import re
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    obs_md = repo_root / "docs" / "OBSERVABILITY.md"
+    assert obs_md.is_file(), (
+        f"docs/OBSERVABILITY.md must exist at {obs_md} "
+        f"(repo_root resolution drift?)"
+    )
+    content = obs_md.read_text(encoding="utf-8")
+
+    # Section bracket: `### Migration steps` heading から、次の `^## ` heading
+    # 直前まで (sub-heading `### ...` は section 内に含めない方針だが、現状
+    # Migration steps 内に sub-heading なし、次の境界は `## Test Requirements`)
+    section_re = re.compile(
+        r"^### Migration steps[^\n]*\n(?P<body>.*?)(?=^## )",
+        re.MULTILINE | re.DOTALL,
+    )
+    m = section_re.search(content)
+    assert m is not None, (
+        "`### Migration steps` heading が docs/OBSERVABILITY.md に見つからない "
+        "(heading rename / section deletion?)"
+    )
+    body = m.group("body")
+
+    # table row pattern: `| <int> | ... | ... |` (header + separator は数字でない
+    # ので自然 skip)
+    row_re = re.compile(r"^\|\s*(\d+)\s*\|", re.MULTILINE)
+    step_numbers = [int(s) for s in row_re.findall(body)]
+    assert step_numbers, (
+        "Migration steps table に step row が 1 件もない "
+        "(heading 直後の table 構造破壊?)"
+    )
+
+    # (1) 重複なし
+    duplicates = sorted(
+        n for n in set(step_numbers)
+        if step_numbers.count(n) > 1
+    )
+    assert not duplicates, (
+        f"Migration steps に重複 step 番号がある: {duplicates} "
+        f"(append 漏れ / copy-paste 事故?)"
+    )
+
+    # (2) 連番 1..N + 出現順序が 1, 2, 3, ... になっている (Codex 05:14 PR-AV
+    # P2 fix: sorted 比較だと row 順序入れ替えを検出できない。append-only
+    # 運用 contract を守るため、raw 出現順 == range(1, N+1) を assert)
+    expected = list(range(1, len(step_numbers) + 1))
+    assert step_numbers == expected, (
+        f"Migration steps が 1..N の append 順序でない: "
+        f"got={step_numbers}, expected={expected} "
+        f"(skip / 1 始まりでない / row 順序入れ替え / backfill 漏れ?)"
+    )
+
+    # (3) 各行の PR cell が空でない (drift 補助 sanity check、最低限の構造維持)。
+    # Codex 05:24 PR-AV 3rd review P2 fix: 旧 regex `[^|]*\|\s*([^|]*?)\s*\|\s*$`
+    # は content cell 内に `|` を含む行 (例: step 27 `None | non-finite` /
+    # step 48 自己言及の `| <int> | ... |`) で match に失敗し、その行の PR cell
+    # 空チェックが skip されていた (full_row_count 46/48、step 27 と 48 が
+    # missing)。content の pipe 数に依存しないよう、row line を `|` で split
+    # して `[-2]` (trailing `|` の直前 cell = PR cell) を見る方式に切替。
+    row_line_re = re.compile(r"^(\|\s*\d+\s*\|.*\|)\s*$", re.MULTILINE)
+    for line in row_line_re.findall(body):
+        parts = line.split("|")
+        # parts: ["", " <num> ", ..., " <PR> ", ""]
+        assert len(parts) >= 4, (
+            f"Migration steps row split 結果が不正 (cell 数不足): {line!r}"
+        )
+        step_num_cell = parts[1].strip()
+        pr_cell = parts[-2].strip()
+        assert pr_cell, (
+            f"Migration steps step {step_num_cell} の PR cell が空 "
+            f"(PR ラベル append 忘れ?)"
+        )
+
+
 def test_observability_warn_legacy_cost_extras_payload_must_be_dict() -> None:
     """`warn_legacy_cost_extras(payload)` の payload dict 必須 contract lock-in
     (Codex 05:05 PR-AU verdict BF、observability deprecation warning contract
@@ -7184,6 +7284,7 @@ def main() -> int:
         test_observability_redact_error_message_tilde_path_token,
         test_observability_build_status_category_override_defensive_lint,
         test_observability_warn_legacy_cost_extras_payload_must_be_dict,
+        test_observability_docs_migration_steps_numbering,
         test_compare_telop_split_error_message_redacted,
         test_compare_telop_split_exit_code_propagates,
         test_visual_smoke_out_dir_mkdir_error_emits_tail,
