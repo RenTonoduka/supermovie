@@ -313,7 +313,7 @@ def cli() -> int:
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        print(f"ERROR: out_dir mkdir failed: {e}", file=sys.stderr)
+        print(f"ERROR: out_dir mkdir failed: {redact_error_message(str(e))}", file=sys.stderr)
         return _emit_early("out_dir_mkdir_error", 3, error=redact_error_message(str(e)))
 
     # 環境チェック (Codex Phase 3-G review P1 #1 反映、render 失敗を環境問題として早期検知)
@@ -322,11 +322,14 @@ def cli() -> int:
             print(f"ERROR: {tool} コマンドが PATH にない", file=sys.stderr)
             return _emit_early("env_tool_missing", 3, missing_tool=tool)
     if not MAIN_VIDEO.exists():
-        print(f"ERROR: base 動画が無い: {MAIN_VIDEO} (npm run visual-smoke は実 project で実行)", file=sys.stderr)
+        # PR-J (stderr path leak audit): default redact、--unsafe-keep-abs-path で raw。
+        _safe_mv = safe_artifact_path(MAIN_VIDEO, project_root=PROJ, unsafe_keep_abs_path=args.unsafe_keep_abs_path)
+        print(f"ERROR: base 動画が無い: {_safe_mv} (npm run visual-smoke は実 project で実行)", file=sys.stderr)
         return _emit_early("env_main_video_missing", 3)
     if not REMOTION_BIN.exists():
+        _safe_rb = safe_artifact_path(REMOTION_BIN, project_root=PROJ, unsafe_keep_abs_path=args.unsafe_keep_abs_path)
         print(
-            f"ERROR: remotion CLI が無い: {REMOTION_BIN} "
+            f"ERROR: remotion CLI が無い: {_safe_rb} "
             f"(npm install を先に実行してください)",
             file=sys.stderr,
         )
@@ -340,13 +343,14 @@ def cli() -> int:
 
     # videoConfig.ts 原本保持
     if not VIDEO_CONFIG.exists():
-        print(f"ERROR: videoConfig.ts が無い: {VIDEO_CONFIG}", file=sys.stderr)
+        _safe_vc = safe_artifact_path(VIDEO_CONFIG, project_root=PROJ, unsafe_keep_abs_path=args.unsafe_keep_abs_path)
+        print(f"ERROR: videoConfig.ts が無い: {_safe_vc}", file=sys.stderr)
         return _emit_early("env_video_config_missing", 4)
     # PR-G: videoConfig.ts read failure (PermissionError / EncodingError 等) を tail emit。
     try:
         original = VIDEO_CONFIG.read_text(encoding="utf-8")
     except OSError as e:
-        print(f"ERROR: videoConfig.ts read failed: {e}", file=sys.stderr)
+        print(f"ERROR: videoConfig.ts read failed: {redact_error_message(str(e))}", file=sys.stderr)
         return _emit_early("video_config_read_error", 3, error=redact_error_message(str(e)))
 
     results: list[dict] = []
@@ -361,7 +365,7 @@ def cli() -> int:
             try:
                 patched = patch_format(original, fmt)
             except ValueError as e:
-                print(f"ERROR: {e}", file=sys.stderr)
+                print(f"ERROR: {redact_error_message(str(e))}", file=sys.stderr)
                 return _emit_early("usage_error_patch_format", 4,
                                    error=redact_error_message(str(e)))
             # PR-G: videoConfig.ts patch write failure (PermissionError 等) を tail emit。
@@ -369,7 +373,7 @@ def cli() -> int:
             try:
                 VIDEO_CONFIG.write_text(patched, encoding="utf-8")
             except OSError as e:
-                print(f"ERROR: videoConfig.ts patch write failed: {e}", file=sys.stderr)
+                print(f"ERROR: videoConfig.ts patch write failed: {redact_error_message(str(e))}", file=sys.stderr)
                 env_error = "video_config_write_error"
                 break
             print(f"\n[smoke] format={fmt} に切替て still を出力します")
@@ -379,8 +383,9 @@ def cli() -> int:
                     render_still(PROJ, frame, png)
                 except subprocess.CalledProcessError as e:
                     # P1 #1: render 失敗は環境問題 (exit 3) として即終了
+                    # PR-J fix iter 2 (Codex 00:28 P1 #2): CalledProcessError str は cmd args 含む raw path leak、redact 必須。
                     print(
-                        f"  ERROR: remotion still failed (fmt={fmt}, frame={frame}): {e}",
+                        f"  ERROR: remotion still failed (fmt={fmt}, frame={frame}): {redact_error_message(str(e))}",
                         file=sys.stderr,
                     )
                     env_error = "still_failed"
@@ -391,7 +396,9 @@ def cli() -> int:
                 try:
                     w, h = probe_dim(png)
                 except subprocess.CalledProcessError as e:
-                    print(f"  ERROR: ffprobe failed for {png}: {e}", file=sys.stderr)
+                    # PR-J: png is abs path under out_dir.resolve()、redact applied.
+                    _safe_png = safe_artifact_path(png, project_root=PROJ, unsafe_keep_abs_path=args.unsafe_keep_abs_path)
+                    print(f"  ERROR: ffprobe failed for {_safe_png}: {redact_error_message(str(e))}", file=sys.stderr)
                     env_error = "probe_failed"
                     results.append(
                         {"format": fmt, "frame": frame, "ok": False, "error": "probe_failed"}
@@ -424,7 +431,8 @@ def cli() -> int:
             VIDEO_CONFIG.write_text(original, encoding="utf-8")
             print(f"\n[smoke] videoConfig.ts を原本に restore しました")
         except OSError as e:
-            print(f"ERROR: videoConfig.ts restore failed: {e}", file=sys.stderr)
+            # PR-J fix iter 2 (Codex 00:28): redact OSError args path。
+            print(f"ERROR: videoConfig.ts restore failed: {redact_error_message(str(e))}", file=sys.stderr)
             env_error = env_error or "video_config_restore_error"
 
     grid_status = "skipped"
@@ -435,13 +443,17 @@ def cli() -> int:
         grid_out = out_dir / "grid.png"
         try:
             make_grid(stills, grid_out, formats, frames, label=grid_label)
-            print(f"\n[smoke] grid: {grid_out}")
+            # PR-J fix iter 2: grid_out も redact (default redact、--unsafe-keep-abs-path で raw)
+            _safe_grid = safe_artifact_path(grid_out, project_root=PROJ, unsafe_keep_abs_path=args.unsafe_keep_abs_path)
+            print(f"\n[smoke] grid: {_safe_grid}")
             grid_status = "ok"
         except subprocess.CalledProcessError as e:
             # P1 #2: grid 失敗は環境問題として exit 3 (silent WARN にしない)
-            print(f"ERROR: ffmpeg grid 合成失敗: {e}", file=sys.stderr)
+            # PR-J fix iter 2 (Codex 00:28 P1 #2): CalledProcessError str redact + grid_error も redact 形で保存。
+            redacted_err = redact_error_message(str(e))
+            print(f"ERROR: ffmpeg grid 合成失敗: {redacted_err}", file=sys.stderr)
             grid_status = "failed"
-            grid_error = str(e)
+            grid_error = redacted_err
 
     summary_path = out_dir / "summary.json"
     # PR-G: summary.json write failure (full-disk / read-only mount 等) を tail emit。
@@ -463,7 +475,7 @@ def cli() -> int:
             encoding="utf-8",
         )
     except OSError as e:
-        print(f"ERROR: summary.json write failed: {e}", file=sys.stderr)
+        print(f"ERROR: summary.json write failed: {redact_error_message(str(e))}", file=sys.stderr)
         return _emit_early("summary_write_error", 3, error=redact_error_message(str(e)))
     # PR-I: default redact、--unsafe-keep-abs-path で raw。
     _safe_summary = safe_artifact_path(summary_path, project_root=PROJ, unsafe_keep_abs_path=args.unsafe_keep_abs_path)

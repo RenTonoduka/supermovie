@@ -364,7 +364,9 @@ def main():
         return exit_code
 
     if not Path(args.input_video).exists():
-        print(f"ERROR: input not found: {args.input_video}", file=sys.stderr)
+        # PR-J (stderr path leak audit): redact input path on stderr (default redact、unsafe で raw)。
+        _safe_input = safe_artifact_path(args.input_video, project_root=PROJ_ROOT, unsafe_keep_abs_path=args.unsafe_keep_abs_path)
+        print(f"ERROR: input not found: {_safe_input}", file=sys.stderr)
         sys.exit(_emit("input_not_found", 3))
 
     # Codex 21:34 PR5 review P1 fix: run_ffprobe failure (CalledProcess /
@@ -373,7 +375,8 @@ def main():
     try:
         probe = run_ffprobe(args.input_video)
     except FFprobeError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+        # PR-J fix iter (Codex 00:28 P1 #1): stderr 側も redact、`FFprobeError` は path を内包する。
+        print(f"ERROR: {redact_error_message(str(e))}", file=sys.stderr)
         sys.exit(_emit("ffprobe_failed", 3, error=redact_error_message(str(e))))
     streams = probe.get("streams", []) or []
     video_streams = [s for s in streams if s.get("codec_type") == "video"]
@@ -409,7 +412,7 @@ def main():
             try:
                 cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError) as e:
-                print(f"ERROR: existing write-config parse failed: {e}", file=sys.stderr)
+                print(f"ERROR: existing write-config parse failed: {redact_error_message(str(e))}", file=sys.stderr)
                 sys.exit(_emit("write_config_parse_error", 3,
                                error=redact_error_message(str(e))))
         else:
@@ -425,7 +428,7 @@ def main():
         try:
             cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
         except OSError as e:
-            print(f"ERROR: write-config write failed: {e}", file=sys.stderr)
+            print(f"ERROR: write-config write failed: {redact_error_message(str(e))}", file=sys.stderr)
             sys.exit(_emit("write_config_write_error", 3,
                            error=redact_error_message(str(e))))
         # PR-I: default redact、--unsafe-keep-abs-path で raw。stderr も同 contract。
