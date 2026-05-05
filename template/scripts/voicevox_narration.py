@@ -709,9 +709,12 @@ def main():
                 p.unlink()
             except OSError:
                 pass
-        if NARRATION_LEGACY_WAV.exists():
+        # Codex P5 review P1 反映: rollback 対象は --output 由来 out_path (custom
+        # path 指定時の orphan 防止)。default は NARRATION_LEGACY_WAV と一致するため
+        # 通常運用では同じ動作、custom path 時のみ差分が出る。
+        if out_path.exists():
             try:
-                NARRATION_LEGACY_WAV.unlink()
+                out_path.unlink()
             except OSError:
                 pass
         try:

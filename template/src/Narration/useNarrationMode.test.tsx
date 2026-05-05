@@ -82,13 +82,16 @@ describe('useNarrationMode', () => {
     }
   });
 
-  it('watches narration.wav and re-evaluates on change', () => {
+  it('watches narration.wav and re-evaluates on change', async () => {
     const { result } = renderHook(() => useNarrationMode());
     expect(result.current.kind).toBe('none');
     // Simulate voicevox_narration.py が narration.wav を生成
-    act(() => {
+    // Phase 3-V P5 review P2 #1 反映: scheduleUpdate が queueMicrotask 経由なので
+    // act() を async にして microtask flush を待つ
+    await act(async () => {
       remotionMock.__setStaticFiles([{ name: 'narration.wav' }]);
       remotionMock.__triggerWatch('narration.wav');
+      await Promise.resolve();
     });
     expect(result.current.kind).toBe('legacy');
   });

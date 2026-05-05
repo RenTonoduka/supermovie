@@ -54,10 +54,26 @@ type StaticFileMeta =
 export const useNarrationMode = (): NarrationMode => {
   const [mode, setMode] = useState<NarrationMode>(() => getNarrationMode());
   const lastSignalRef = useRef<Map<string, string>>(new Map());
+  const pendingRef = useRef<boolean>(false);
 
   useEffect(() => {
     const cancels: Array<() => void> = [];
     const dedupSignal = lastSignalRef.current;
+
+    // Codex P5 review P2 #1 反映: cross-file burst coalescing
+    // (sentinel + legacy + chunks の event が近接した時、各 callback で個別に
+    // invalidate + setMode するのではなく queueMicrotask で 1 回に集約)。
+    const scheduleUpdate = () => {
+      if (pendingRef.current) {
+        return;
+      }
+      pendingRef.current = true;
+      queueMicrotask(() => {
+        pendingRef.current = false;
+        invalidateNarrationMode();
+        setMode(getNarrationMode());
+      });
+    };
 
     const makeUpdate =
       (key: string, isSentinel: boolean) => (file?: StaticFileMeta) => {
@@ -66,7 +82,7 @@ export const useNarrationMode = (): NarrationMode => {
         if (isSentinel && file === null) {
           return;
         }
-        // file metadata が取れる場合のみ dedup engage
+        // file metadata が取れる場合のみ per-key dedup engage
         // (test mock など callback が arg なしで呼ぶ context は always update)
         if (
           file &&
@@ -78,8 +94,7 @@ export const useNarrationMode = (): NarrationMode => {
           }
           dedupSignal.set(key, signal);
         }
-        invalidateNarrationMode();
-        setMode(getNarrationMode());
+        scheduleUpdate();
       };
 
     // sentinel watcher (Phase 3-V P5: narration.ready.json publish 完了 signal)
