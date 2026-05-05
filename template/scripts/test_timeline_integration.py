@@ -8788,6 +8788,185 @@ def test_observability_path_policy_placeholder_set_docs_code_lint() -> None:
     )
 
 
+def test_observability_provider_notes_routing_docs_code_lint() -> None:
+    """`docs/OBSERVABILITY.md §Provider Notes` 4 row ↔ provider routing
+    isolation 双方向 lint
+    (Codex 08:40 PR-CF verdict、PR-BD/BE/BF/BH/BI/BJ/BK/BL/BM/BN/BO/CC/CD/CE
+    同型を Provider Notes table axis に展開)。
+
+    docs §Provider Notes は 4 provider の cost unit / rate kind 分類表:
+      row 1: Anthropic API (slide plan) — `$/MTok input + $/MTok output`、
+              text generation、`env 必須`
+      row 2: Gemini API (image gen) — `$/image`、image generation、別 env 系
+              (本 doc 後の別 PR で固定)
+      row 3: VOICEVOX (narration) — `local engine`, `cost なし`,
+              `voicevox_narration.py` link, `telemetry 対象外`
+      row 4: Kling / 他 (将来) — `provider 個別`, `別 doc 化`
+
+    docs と code が drift すると、(a) docs 4 provider の片方の row が
+    削除 / rename されると caller が docs を信じて誤った env / cost 経路
+    を実装、(b) Anthropic row の `env 必須` 注釈が消えると新 caller が rate
+    env を passthrough 失念 → estimate=null / silent failure、(c) VOICEVOX
+    row の `cost なし / telemetry 対象外` claim が drift して
+    voicevox_narration.py に誤って Anthropic/Gemini rate env 参照を追加
+    すると provider 経路の混在 / cost 二重計上、(d) Gemini row の `別 env
+    系` 注釈が消えると Anthropic env を流用しようとする drift。
+
+    本 lint は 4-part validation:
+      1. docs §Provider Notes section に 4 row 必須 keyword presence
+         (Anthropic API + $/MTok + env 必須、Gemini API + $/image、
+         VOICEVOX + local engine + cost なし + telemetry 対象外、Kling +
+         将来)
+      2. Anthropic provider routing: `generate_slide_plan.py` AST に
+         SUPERMOVIE_RATE_ANTHROPIC_INPUT/OUTPUT_USD_PER_MTOK env literal
+         参照あり (PR-BO 同型 caller→docs 整合の Anthropic provider 視点)
+      3. VOICEVOX provider isolation: `voicevox_narration.py` AST に
+         `SUPERMOVIE_RATE_*` env literal が 0 件 (cost なし契約 lock-in)
+      4. VOICEVOX cross-provider isolation: `voicevox_narration.py` source
+         text に `Anthropic` / `Gemini` 語が出ない (provider 経路の
+         混在 fail-loud、telemetry 対象外契約)
+
+    PR-BD/BE/BF/BH/BI/BJ/BK/BL/BM/BN/BO/CC/CD/CE 同 level の docs/code 双方向
+    audit、本 lint は provider 分類表 ↔ provider 経路 isolation という別
+    axis を fix + 1 件 regression test。
+    """
+    import ast as _ast_re
+    import re
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    obs_md = repo_root / "docs" / "OBSERVABILITY.md"
+    md = obs_md.read_text(encoding="utf-8")
+
+    # `### Provider Notes` section 抽出
+    section_re = re.compile(
+        r"^### Provider Notes[^\n]*\n(?P<body>.*?)"
+        r"(?=^## |^### )",
+        re.MULTILINE | re.DOTALL,
+    )
+    m = section_re.search(md)
+    assert m is not None, (
+        "`### Provider Notes` の section が docs に見つからない "
+        "(heading rename / 構造変更?)"
+    )
+    body = m.group("body")
+
+    # PR-CF P2 fix #1 (Codex 08:43): markdown table data row 単位で 4 provider
+    # を抽出 + 同一 row 内に必須 keyword 全件を assert (prose に崩れた drift /
+    # 1 row 内 keyword 散らかし drift を fail-loud)
+    table_rows: list[str] = []
+    for line in body.split("\n"):
+        if not line.startswith("| "):
+            continue
+        if line.startswith("|---"):
+            continue
+        # header 行 (| provider | unit | rate kind |) を除外
+        if "provider" in line and "unit" in line and "rate kind" in line:
+            continue
+        table_rows.append(line)
+    assert len(table_rows) == 4, (
+        f"docs §Provider Notes table data row 数が 4 でない: "
+        f"{len(table_rows)} (provider 4 row 契約 drift?)"
+    )
+
+    PROVIDER_ROW_KEYWORDS: list[tuple[str, str, list[str]]] = [
+        ("Anthropic", "Anthropic", ["Anthropic API", "$/MTok", "env 必須"]),
+        ("Gemini", "Gemini", ["Gemini API", "$/image"]),
+        (
+            "VOICEVOX",
+            "VOICEVOX",
+            ["VOICEVOX", "local engine", "cost なし", "telemetry 対象外"],
+        ),
+        ("Kling", "Kling", ["Kling", "将来"]),
+    ]
+    for provider_name, row_marker, keywords in PROVIDER_ROW_KEYWORDS:
+        matching_rows = [r for r in table_rows if row_marker in r]
+        assert matching_rows, (
+            f"docs §Provider Notes table から {provider_name} の data "
+            f"row が抽出できない (row marker '{row_marker}' 削除 / "
+            f"rename drift?)"
+        )
+        # 同一 provider に複数 row marker hit がある場合は最初の row を採用
+        provider_row = matching_rows[0]
+        for kw in keywords:
+            assert kw in provider_row, (
+                f"docs §Provider Notes の {provider_name} row に必須 "
+                f"keyword '{kw}' が同一 row 内に見つからない "
+                f"(row 内 keyword 散らかし / 注釈消失 drift?): "
+                f"row={provider_row!r}"
+            )
+
+    # Anthropic provider routing: generate_slide_plan.py AST に
+    # SUPERMOVIE_RATE_ANTHROPIC_*_USD_PER_MTOK env literal 参照あり
+    gsp_path = (
+        repo_root / "template" / "scripts" / "generate_slide_plan.py"
+    )
+    gsp_src = gsp_path.read_text(encoding="utf-8")
+    gsp_tree = _ast_re.parse(gsp_src, filename="generate_slide_plan.py")
+    anthropic_env_re = re.compile(
+        r"^SUPERMOVIE_RATE_ANTHROPIC_(INPUT|OUTPUT)_USD_PER_MTOK$"
+    )
+    found_anthropic_envs: set[str] = set()
+    for node in _ast_re.walk(gsp_tree):
+        if (
+            isinstance(node, _ast_re.Constant)
+            and isinstance(node.value, str)
+            and anthropic_env_re.match(node.value)
+        ):
+            found_anthropic_envs.add(node.value)
+    EXPECTED_ANTHROPIC_ENVS = {
+        "SUPERMOVIE_RATE_ANTHROPIC_INPUT_USD_PER_MTOK",
+        "SUPERMOVIE_RATE_ANTHROPIC_OUTPUT_USD_PER_MTOK",
+    }
+    missing_anthropic = sorted(
+        EXPECTED_ANTHROPIC_ENVS - found_anthropic_envs
+    )
+    assert not missing_anthropic, (
+        f"generate_slide_plan.py AST に Anthropic provider rate env "
+        f"literal が欠落: {missing_anthropic} (Anthropic provider 経路 "
+        f"docs row claim 'env 必須' と drift?)"
+    )
+
+    # VOICEVOX provider isolation: voicevox_narration.py AST に
+    # SUPERMOVIE_RATE_* env literal 0 件 (cost なし契約 lock-in)
+    vox_path = (
+        repo_root / "template" / "scripts" / "voicevox_narration.py"
+    )
+    vox_src = vox_path.read_text(encoding="utf-8")
+    vox_tree = _ast_re.parse(vox_src, filename="voicevox_narration.py")
+    rate_env_re = re.compile(r"^SUPERMOVIE_RATE_[A-Z_]+$")
+    vox_rate_envs: list[str] = []
+    for node in _ast_re.walk(vox_tree):
+        if (
+            isinstance(node, _ast_re.Constant)
+            and isinstance(node.value, str)
+            and rate_env_re.match(node.value)
+        ):
+            vox_rate_envs.append(node.value)
+    assert not vox_rate_envs, (
+        f"voicevox_narration.py AST に SUPERMOVIE_RATE_* env literal が "
+        f"見つかった: {vox_rate_envs} (docs §Provider Notes row 3 "
+        f"'cost なし / telemetry 対象外' 契約と drift、provider 経路 "
+        f"混在?)"
+    )
+
+    # VOICEVOX cross-provider isolation: source text に Anthropic /
+    # Gemini 語が出ない
+    # PR-CF P2 fix #2 (Codex 08:43): case-insensitive + word boundary
+    # 検出で `anthropic` / `ANTHROPIC` / `gemini` 等の大小文字 drift も
+    # fail-loud (provider 名混在 risk の網羅範囲を広げる)
+    foreign_re = re.compile(r"\b(anthropic|gemini)\b", re.IGNORECASE)
+    foreign_hits = [
+        m.group(0) for m in foreign_re.finditer(vox_src)
+    ]
+    assert not foreign_hits, (
+        f"voicevox_narration.py source に provider 名 (Anthropic / "
+        f"Gemini、case-insensitive) が出現: {foreign_hits} "
+        f"(docs §Provider Notes row 3 'telemetry 対象外' isolation "
+        f"契約と drift、provider 経路混在 / cost 二重計上 risk?)"
+    )
+
+
 def test_observability_cost_abort_threshold_docs_code_lint() -> None:
     """`docs/OBSERVABILITY.md §Cost Abort Threshold` ↔
     `STATUS_MAP["cost_guard_aborted"]` / `generate_slide_plan.py` の
@@ -10803,6 +10982,7 @@ def main() -> int:
         test_observability_status_mapping_policy_docs_code_lint,
         test_observability_missing_rate_behavior_docs_code_lint,
         test_observability_cost_abort_threshold_docs_code_lint,
+        test_observability_provider_notes_routing_docs_code_lint,
         test_compare_telop_split_error_message_redacted,
         test_compare_telop_split_exit_code_propagates,
         test_visual_smoke_out_dir_mkdir_error_emits_tail,
