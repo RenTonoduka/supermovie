@@ -163,7 +163,22 @@ def main():
                          "両 rate 設定時のみ dry-run cost estimate 計算)")
     ap.add_argument("--rate-output", type=float, default=None,
                     help="output cost rate USD/MTok (env: SUPERMOVIE_RATE_OUTPUT_PER_MTOK)")
+    # Phase 3-V P3 logging 拡張 (Codex CODEX_P2_COST_GUARD_DESIGN §4): voicevox_narration の
+    # --json-log と同じ pattern で全 return path を status JSON で観測可能に。
+    ap.add_argument("--json-log", action="store_true",
+                    help="末尾に summary を 1 行純 JSON として emit "
+                         "(downstream observability、既存 stdout は維持)")
     args = ap.parse_args()
+
+    # Codex P3 logging 拡張 (CODEX_P2_COST_GUARD_DESIGN §4): 全 return path に
+    # status / exit_code 付き JSON emit。dry-run JSON は本 helper を使わず
+    # 既存 schema (status="dry_run", api_called=false 等) を維持し、それ以外の path
+    # で本 helper を経由する (dry-run は単一 JSON line を返す契約のため)。
+    def emit_json(status: str, exit_code: int, **extra) -> int:
+        if args.json_log:
+            payload = {"status": status, "exit_code": exit_code, **extra}
+            print(json.dumps(payload, ensure_ascii=False))
+        return exit_code
 
     # Codex P2 review P1 反映 (CODEX_P2_COST_GUARD_REVIEW:3-5):
     # API key 未設定 skip は cost guard env 解決より前に判定する。
@@ -173,7 +188,7 @@ def main():
     if not api_key and not args.dry_run:
         print("INFO: ANTHROPIC_API_KEY 未設定 → slide_plan 生成 skip")
         print("      build_slide_data.py は --plan 無しで deterministic に走ります")
-        return 0
+        return emit_json("api_key_skipped", 0)
 
     # cost guard arg 解決 (CLI > env > default)
     try:
@@ -211,13 +226,13 @@ def main():
         rate_output = _resolve_decimal(args.rate_output, "SUPERMOVIE_RATE_OUTPUT_PER_MTOK")
     except ValueError as e:
         print(f"ERROR: cost guard arg invalid: {e}", file=sys.stderr)
-        return 4
+        return emit_json("cost_guard_arg_invalid", 4, error=str(e))
 
     transcript_path = PROJ / "transcript_fixed.json"
     config_path = PROJ / "project-config.json"
     if not transcript_path.exists() or not config_path.exists():
         print(f"ERROR: transcript_fixed.json or project-config.json missing under {PROJ}", file=sys.stderr)
-        return 3
+        return emit_json("inputs_missing", 3)
 
     transcript = load_json(transcript_path)
     config = load_json(config_path)
@@ -332,9 +347,9 @@ def main():
                 f"retry-after={retry_after}, body={body[:300]}",
                 file=sys.stderr,
             )
-            return 9
+            return emit_json("rate_limited", 9, retry_after=retry_after)
         print(f"ERROR: Anthropic API HTTP {e.code}: {body[:500]}", file=sys.stderr)
-        return 4
+        return emit_json("api_http_error", 4, http_status=e.code)
 
     text = "".join(b.get("text", "") for b in response.get("content", []) if b.get("type") == "text")
     # コードフェンス除去 (LLM が markdown 返した場合)
@@ -349,13 +364,21 @@ def main():
         plan = json.loads(text)
     except json.JSONDecodeError as e:
         print(f"ERROR: LLM 応答が JSON parse 失敗: {e}\n--- raw ---\n{text[:1000]}", file=sys.stderr)
-        return 5
+        return emit_json("llm_json_invalid", 5, error=str(e))
 
     out_path = Path(args.output)
     out_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"wrote: {out_path}")
     print(f"slides: {len(plan.get('slides', []))}")
-    return 0
+    return emit_json(
+        "success", 0,
+        model=args.model,
+        max_tokens=max_tokens,
+        max_input_words=max_input_words,
+        max_input_segments=max_input_segments,
+        slides=len(plan.get("slides", [])),
+        output=str(out_path),
+    )
 
 
 if __name__ == "__main__":

@@ -1105,6 +1105,92 @@ def test_generate_slide_plan_max_tokens_cap_rejects() -> None:
             gsp.PROJ = original_proj
 
 
+def test_generate_slide_plan_json_log_status_path() -> None:
+    """Phase 3-V P3 logging 拡張 (Codex P2 design §4): --json-log で全 return path に
+    status / exit_code 付き JSON emit を確認 (success / api_key_skipped 2 path)."""
+    import generate_slide_plan as gsp
+    import os as _os
+    import urllib.request as _urlreq
+    import io as _io
+    import contextlib
+
+    def mock_urlopen_success(req, timeout=60):
+        resp_text = json.dumps({
+            "content": [{"type": "text", "text": json.dumps({
+                "version": "supermovie.slide_plan.v1",
+                "slides": [{"id": 1, "startWordIndex": 0, "endWordIndex": 0, "title": "t"}],
+            })}]
+        })
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def read(self): return resp_text.encode("utf-8")
+        return FakeResp()
+
+    original_urlopen = _urlreq.urlopen
+    original_proj = gsp.PROJ
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        gsp.PROJ = proj
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps({"words": [{"text": "x"}], "segments": []}),
+            encoding="utf-8",
+        )
+        (proj / "project-config.json").write_text(
+            json.dumps({"format": "short"}), encoding="utf-8",
+        )
+        # ケース 1: success path with --json-log
+        _os.environ["ANTHROPIC_API_KEY"] = "fake"
+        _urlreq.urlopen = mock_urlopen_success
+        try:
+            captured = _io.StringIO()
+            import sys as _sys
+            old_argv = _sys.argv
+            output_path = proj / "slide_plan.json"
+            _sys.argv = [
+                "generate_slide_plan.py",
+                "--json-log",
+                "--output", str(output_path),
+            ]
+            try:
+                with contextlib.redirect_stdout(captured):
+                    ret = gsp.main()
+                assert_eq(ret, 0, "success exit 0")
+                lines = [ln for ln in captured.getvalue().splitlines() if ln.strip()]
+                payload = json.loads(lines[-1])
+                assert_eq(payload.get("status"), "success", "success status field")
+                assert_eq(payload.get("exit_code"), 0, "success exit_code")
+                if "slides" not in payload:
+                    raise AssertionError(f"missing slides in success JSON: {payload}")
+            finally:
+                _sys.argv = old_argv
+
+            # ケース 2: api_key skip path with --json-log
+            captured.seek(0)
+            captured.truncate()
+            _os.environ.pop("ANTHROPIC_API_KEY", None)
+            _sys.argv = ["generate_slide_plan.py", "--json-log"]
+            try:
+                with contextlib.redirect_stdout(captured):
+                    ret = gsp.main()
+                assert_eq(ret, 0, "api_key_skipped exit 0")
+                lines = [ln for ln in captured.getvalue().splitlines() if ln.strip()]
+                payload = json.loads(lines[-1])
+                assert_eq(payload.get("status"), "api_key_skipped", "skip status field")
+                assert_eq(payload.get("exit_code"), 0, "skip exit_code")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            if original_api_key is None:
+                _os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                _os.environ["ANTHROPIC_API_KEY"] = original_api_key
+            _urlreq.urlopen = original_urlopen
+            gsp.PROJ = original_proj
+
+
 def test_generate_slide_plan_skip_preserves_with_bad_env() -> None:
     """Phase 3-V P2 review P1 fix (CODEX_P2_COST_GUARD_REVIEW:3-5):
     API key 未設定 skip は cost guard env 解決より前に実行される (既存挙動維持)。
@@ -2354,6 +2440,7 @@ def main() -> int:
         test_generate_slide_plan_dry_run_no_api_key,
         test_generate_slide_plan_max_tokens_override_cli_env_precedence,
         test_generate_slide_plan_max_tokens_cap_rejects,
+        test_generate_slide_plan_json_log_status_path,
         test_generate_slide_plan_skip_preserves_with_bad_env,
         test_generate_slide_plan_rate_rejects_nan_inf,
         test_generate_slide_plan_max_input_caps_prompt,
