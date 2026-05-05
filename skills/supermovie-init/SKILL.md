@@ -169,6 +169,18 @@ cd "<PROJECT_DIR>" && npm install
 
 ---
 
+## Phase 5-1: sandbox sentinel 作成 (safe_rsync wrapper 用)
+
+新 project に `.supermovie-sandbox` file を作成。これは `scripts/safe_rsync.sh` の **`--apply` 必要条件** (sentinel 不在の destination では `--delete` 走らない、Roku 前 work artifact 保護のため、2026-05-05 16:14 rsync 副作用 incident 起点)。
+
+```bash
+bash <SUPERMOVIE_REPO>/scripts/safe_rsync.sh --init-sentinel --dest "<PROJECT_DIR>"
+```
+
+詳細: CLAUDE.md `## project 同期 (safe_rsync wrapper)` + `scripts/safe_rsync.sh` + `scripts/safe_rsync.protect`。
+
+---
+
 ## Phase 6: 起動確認
 
 ```bash
