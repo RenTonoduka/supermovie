@@ -12,12 +12,12 @@
 
 ## Verified Snapshot (作成時点で Bash 実測、push/PR 前に再更新)
 
-| 項目 | 値 (Bash 実測 2026-05-05 12:08) |
+| 項目 | 値 (Bash 実測 2026-05-05 12:30) |
 |---|---|
-| HEAD | `e0f5107` |
+| HEAD | `31dd9cc` |
 | branch | `roku/phase3j-timeline` |
-| main..HEAD | 119 commits |
-| roku/phase3i-transcript-alignment..HEAD | 101 commits |
+| main..HEAD | 122 commits |
+| roku/phase3i-transcript-alignment..HEAD | 104 commits |
 | origin remote | `https://github.com/RenTonoduka/supermovie.git` |
 | origin viewerPermission | READ (Roku gh account `blessing1031r-dotcom` は write 権限なし) |
 | fork remote | 不在 (`git remote get-url fork` で error: No such remote、Step 6 で `gh repo fork` 後に `git remote add fork` 予定) |

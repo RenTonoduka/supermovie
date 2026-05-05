@@ -1,14 +1,14 @@
 # SuperMovie Phase 3 Release Note (2026-05-04 → 2026-05-05)
 
-`roku/phase3j-timeline` HEAD: `e0f5107` (Codex CODEX_REVIEW_PHASE3V_FINAL 20260505T064250
+`roku/phase3j-timeline` HEAD: `31dd9cc` (Codex CODEX_REVIEW_PHASE3V_FINAL 20260505T064250
 で「P0/P1/P2 なし、Phase 3-V production 品質で止めてよい」 verdict 後、post-freeze
 backlog 第 1〜3 弾 + P3 logging extension + Codex 4 cycle re-review (P5/2nd-batch/P2/P3-slide-plan
 全 P0/P1 NONE) を反映、Codex CODEX_FULL_SESSION_REVIEW 20260505T113913 で「過剰実装、
 P5 sentinel 以降は黄信号」と判定)
 
 Phase 3-A 〜 Phase 3-V の自走実装結果 + 後続 post-freeze backlog 第 1〜3 弾。本 note は
-Roku 不在モード中に Claude+Codex 協働で 101 commit (`roku/phase3i-transcript-alignment..HEAD`、
-main..HEAD は 119 commit、Bash 実測) を積んだ成果物の release assertion を固定する目的。
+Roku 不在モード中に Claude+Codex 協働で 104 commit (`roku/phase3i-transcript-alignment..HEAD`、
+main..HEAD は 122 commit、Bash 実測) を積んだ成果物の release assertion を固定する目的。
 
 ## Release-readiness statement (2026-05-05 時点、技術 readiness のみ)
 
@@ -25,7 +25,7 @@ main..HEAD は 119 commit、Bash 実測) を積んだ成果物の release assert
 Roku 判断領域 (release blocker 候補):
 - ★ PR / merge 戦略: phase3f→g→h→i→j は ancestry 連結済み、技術的に階層 merge
   不要。Codex 推奨は `roku/phase3j-timeline` を 1 PR / squash merge。`main..HEAD`
-  は 119 commits (Bash 実測)、PR diff は phase3i..HEAD の 101 commits より大きく見える点に注意。
+  は 122 commits (Bash 実測)、PR diff は phase3i..HEAD の 104 commits より大きく見える点に注意。
   upstream `RenTonoduka/supermovie` (Roku 所有でない、現 gh account `blessing1031r-dotcom`
   は READ only、Bash 実測) のため Codex 推奨は **Option A: fork → blessing1031r-dotcom →
   upstream PR** (CODEX_FULL_SESSION_REVIEW 20260505T113913 §推奨理由、release branch 外、commit history で参照可)。
@@ -217,9 +217,11 @@ scripts/regen_phase3_progress.sh     [新規 Phase 3-O、Phase 3-Q で --verify 
 
 docs/
 ├── PHASE3_PROGRESS.md               [新規 Phase 3-M、auto-gen]
-├── PHASE3_RELEASE_NOTE.md           [本 file、Phase 3-Q 末尾 release assertion]
-└── reviews/                         [Codex 14 artifact、git tracked]
+└── PHASE3_RELEASE_NOTE.md           [本 file、Phase 3-Q 末尾 release assertion]
 ```
+
+(docs/reviews/ は cleanup commit `e0f5107` で release branch から外し済み、Codex 14 + post-freeze 26 artifact は commit history で参照可、Roku 別 archive 候補。
+docs/roadmap/FUTURE_FEATURES_REQUIREMENTS_v0.md は別 branch `roku/future-features-v0` (commit `72a6ef4`、main 起点) に切り出し済み。)
 
 ---
 
