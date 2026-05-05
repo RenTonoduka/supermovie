@@ -3399,6 +3399,125 @@ def test_observability_emit_json_disabled_no_print(capsys=None) -> None:
     assert rc2 == 0
 
 
+def test_observability_emit_json_format_lint() -> None:
+    """`emit_json()` の stdout output が「最終行 1 line / pure JSON /
+    final newline」契約を保つこと (Codex 02:34 PR-Y verdict AJ)。
+
+    `--json-log` の downstream parser (log analyzer / regression test)
+    は stdout 末尾を `splitlines()[-1]` で取って `json.loads()` する
+    pattern を前提にしている。format contract の要素:
+
+      (1) enabled=True で stdout 出力は exactly 1 line + 末尾 `\\n`
+      (2) その行は `json.loads` 可能で payload と semantically 等価
+      (3) embedded control char (`\\n` / `\\t` / `\\"`) を含む value も
+          escape されて pure single line を維持
+      (4) non-ASCII (ja 文字列) も `ensure_ascii=False` で literal 維持、
+          ただし行構造は崩れない
+      (5) enabled=False は stdout に何も書かない (existing test 補強)
+
+    既存 `test_observability_emit_json_disabled_no_print` は出力 1 行を
+    `strip()` した後の json parse のみ assert、行数 / 末尾改行 / 制御
+    文字 escape の format invariant までは固定していない。
+    """
+    import io
+    from contextlib import redirect_stdout
+
+    from _observability import build_status, emit_json
+
+    # (1) plain payload で exactly 1 newline (= 1 line + final \n)、blank
+    # 行混入なし。Codex 02:38 PR-Y review P2 fix: `out.count("\n") == 1`
+    # で blank line 検出を tighten (downstream `splitlines()[-1]` が空行を
+    # 拾って壊れる risk を closure)。
+    payload = build_status(script="x", v0_status="success", exit_code=0)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = emit_json(True, payload)
+    out = buf.getvalue()
+    assert out.endswith("\n"), f"emit_json output must end with newline, got {out!r}"
+    assert out.count("\n") == 1, (
+        f"emit_json output must contain exactly 1 newline (no blank lines), "
+        f"got {out.count('\n')}: {out!r}"
+    )
+    parsed = json.loads(out[:-1])
+    assert parsed["status"] == "ok"
+    assert parsed["script"] == "x"
+    assert rc == 0
+
+    # (2) embedded control char (\n / \t / \" / \\) in extras を escape
+    extras_with_ctrl = build_status(
+        script="x", v0_status="success", exit_code=0,
+        weird_field="line1\nline2\twith \"quote\" and \\backslash",
+    )
+    buf2 = io.StringIO()
+    with redirect_stdout(buf2):
+        emit_json(True, extras_with_ctrl)
+    out2 = buf2.getvalue()
+    assert out2.endswith("\n"), f"output must end with newline: {out2!r}"
+    # exactly 1 newline (control char escape の double check、blank line nor
+    # body 内 raw \n がない)
+    assert out2.count("\n") == 1, (
+        f"control-char case must produce exactly 1 newline, got "
+        f"{out2.count('\n')}: {out2!r}"
+    )
+    body2 = out2[:-1]
+    assert "\n" not in body2, (
+        f"emit_json body must not contain raw newline (must be escaped): {body2!r}"
+    )
+    assert "\t" not in body2, (
+        f"emit_json body must not contain raw tab (must be escaped): {body2!r}"
+    )
+    parsed2 = json.loads(body2)
+    assert parsed2["weird_field"] == "line1\nline2\twith \"quote\" and \\backslash"
+
+    # (3) non-ASCII (日本語) は ensure_ascii=False で literal 維持、ただし
+    # 行構造は崩れない
+    extras_jp = build_status(
+        script="x", v0_status="success", exit_code=0,
+        title="日本語テスト",
+    )
+    buf3 = io.StringIO()
+    with redirect_stdout(buf3):
+        emit_json(True, extras_jp)
+    out3 = buf3.getvalue()
+    assert out3.endswith("\n")
+    assert out3.count("\n") == 1, (
+        f"non-ASCII case must produce exactly 1 newline, got "
+        f"{out3.count('\n')}: {out3!r}"
+    )
+    body3 = out3[:-1]
+    assert "\n" not in body3, "single-line invariant broken with non-ASCII"
+    assert "日本語テスト" in body3, (
+        f"ensure_ascii=False expected to keep literal JP, got {body3!r}"
+    )
+    parsed3 = json.loads(body3)
+    assert parsed3["title"] == "日本語テスト"
+
+    # (4) enabled=False で stdout に何も書かない (existing test 補強)
+    buf4 = io.StringIO()
+    with redirect_stdout(buf4):
+        rc4 = emit_json(False, payload)
+    assert buf4.getvalue() == "", (
+        f"emit_json(False) must produce no stdout, got {buf4.getvalue()!r}"
+    )
+    assert rc4 == 0
+
+    # (5) exit_code propagation: payload["exit_code"] が rc に出る
+    err_payload = build_status(script="x", v0_status="rate_limited", exit_code=2)
+    buf5 = io.StringIO()
+    with redirect_stdout(buf5):
+        rc5 = emit_json(True, err_payload)
+    out5 = buf5.getvalue()
+    assert out5.endswith("\n")
+    assert out5.count("\n") == 1, (
+        f"error case must produce exactly 1 newline, got "
+        f"{out5.count('\n')}: {out5!r}"
+    )
+    parsed5 = json.loads(out5[:-1])
+    assert parsed5["status"] == "error"
+    assert parsed5["exit_code"] == 2
+    assert rc5 == 2, f"emit_json must return payload exit_code, got {rc5}"
+
+
 def test_observability_resolve_run_context_uses_env() -> None:
     """env (SUPERMOVIE_RUN_ID / PARENT_RUN_ID / STEP_ID) 設定値をそのまま採用する。"""
     import os as _os
@@ -4986,6 +5105,7 @@ def main() -> int:
         test_observability_warn_legacy_cost_extras_env_gated,
         test_observability_provider_body_stderr_default_redact,
         test_observability_emit_json_disabled_no_print,
+        test_observability_emit_json_format_lint,
         # PR-E (distributed tracing run_id active emission): 7 件
         test_observability_resolve_run_context_uses_env,
         test_observability_resolve_run_context_generates_when_missing,
