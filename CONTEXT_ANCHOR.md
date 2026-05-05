@@ -12,12 +12,12 @@
 
 ## Verified Snapshot (作成時点で Bash 実測、push/PR 前に再更新)
 
-| 項目 | 値 (Bash 実測 2026-05-05 12:55) |
+| 項目 | 値 (Bash 実測 2026-05-05 13:01) |
 |---|---|
-| HEAD (source commit) | `4e21826` (anchor 自身の document commit はこの後ろに 1 件積まれる、§Source commit vs Document commit 規約 参照) |
+| HEAD (source commit) | `6e89ef5` (anchor 自身の document commit はこの後ろに 1 件積まれる、§Source commit vs Document commit 規約 参照) |
 | branch | `roku/phase3j-timeline` |
-| main..HEAD | 126 commits |
-| roku/phase3i-transcript-alignment..HEAD | 108 commits |
+| main..HEAD | 127 commits |
+| roku/phase3i-transcript-alignment..HEAD | 109 commits |
 | origin remote | `https://github.com/RenTonoduka/supermovie.git` |
 | origin viewerPermission | READ (Roku gh account `blessing1031r-dotcom` は write 権限なし) |
 | fork remote | 不在 (`git remote get-url fork` で error: No such remote、Step 6 で `gh repo fork` 後に `git remote add fork` 予定) |
@@ -117,15 +117,15 @@ Codex review prompt の先頭で必ず本 anchor を参照させる:
 | **1** | anchor 自身の document commit が source commit の後ろに 1 つ積まれた状態 | **intrinsic、P1 扱いしない** |
 | **≥2** | source commit の後に code / docs commit が 2 つ以上積まれた状態 | **stale、P1 扱い、anchor refresh 必要** |
 
-**機械判定 sketch** (将来 `check_release_ready.sh` に組み込む候補、別 PR scope、Task #9):
+**機械判定** (`scripts/check_release_ready.sh` gate 7 で実装済み、Task #9):
 ```bash
-SOURCE_COMMIT=$(awk '/^\| HEAD/ {gsub(/[^a-f0-9]/, "", $5); print $5; exit}' CONTEXT_ANCHOR.md)
+SOURCE_COMMIT=$(grep -m 1 '^| HEAD' CONTEXT_ANCHOR.md | sed -nE 's/.*`([a-f0-9]{7,})`.*/\1/p' | head -1)
 DRIFT=$(git rev-list ${SOURCE_COMMIT}..HEAD --count)
-DOCS_ONLY=$(git diff --name-only ${SOURCE_COMMIT}..HEAD | grep -vE '^(CONTEXT_ANCHOR\.md|docs/)' | wc -l)
-[ "$DRIFT" -le 1 ] && [ "$DOCS_ONLY" -eq 0 ]   # true なら intrinsic / 安全
+NON_DOCS=$(git diff --name-only ${SOURCE_COMMIT}..HEAD | grep -vE '^(CONTEXT_ANCHOR\.md|docs/)' | wc -l | tr -d ' ')
+[ "$DRIFT" -le 1 ] && [ "$NON_DOCS" -eq 0 ]   # true なら intrinsic / 安全 (gate 7 OK)
 ```
 
-drift > 1 で docs-only でも stale。drift = 1 でも source の後に code commit があれば (= `DOCS_ONLY` > 0) stale 扱い。
+drift > 1 で docs-only でも stale (exit 7)。drift = 1 でも source の後に code commit があれば (= `NON_DOCS` > 0) stale 扱い。`bash scripts/check_release_ready.sh` で gate 7 が drift = 1 + docs-only で OK になることを confirm 済。
 
 ## 更新責任
 

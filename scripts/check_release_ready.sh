@@ -14,6 +14,8 @@
 #   4 = unknown env (git / python3 不在)
 #   5 = npm run lint fail (node_modules 存在時のみ)
 #   6 = npm run test:react fail (node_modules + vitest 存在時のみ)
+#   7 = anchor drift stale (CONTEXT_ANCHOR.md の source commit から HEAD まで
+#       drift > 1 or non-docs commit 含む = anchor refresh 必要)
 #
 # 走らせる gate:
 #   1. git rev-parse / python3 / bash 環境チェック
@@ -25,6 +27,11 @@
 #   6. (optional) cd template && npm run test:react (Phase 3-S B5、useNarrationMode
 #      hook の watchStaticFile + invalidation 検証、vitest + jsdom + RTL、
 #      node_modules + vitest 不在で skip)
+#   7. anchor drift check (CONTEXT_ANCHOR.md §Source commit vs Document commit 規約)
+#      - source commit が git history に存在
+#      - drift = `git rev-list source..HEAD --count` ≤ 1
+#      - source..HEAD diff が docs-only (CONTEXT_ANCHOR.md / docs/ 配下のみ)
+#      - 上記 3 条件全 OK で intrinsic、外れたら stale
 #
 # 走らせない gate (実 project / 課金):
 #   - npm run visual-smoke (実 main.mp4 必要)
@@ -125,6 +132,36 @@ if [ -d "$REPO_DIR/template/node_modules" ] && [ -x "$REPO_DIR/template/node_mod
     fi
 else
     echo "  [SKIP] template/node_modules + vitest 不在、Roku 環境で npm install 後に再実行推奨"
+fi
+
+# 7. anchor drift check (CONTEXT_ANCHOR.md §Source commit vs Document commit 規約)
+echo
+echo "--- anchor drift check ---"
+ANCHOR_FILE="$REPO_DIR/CONTEXT_ANCHOR.md"
+if [ ! -f "$ANCHOR_FILE" ]; then
+    echo "  [SKIP] CONTEXT_ANCHOR.md 不在"
+else
+    SOURCE_COMMIT=$(grep -m 1 '^| HEAD' "$ANCHOR_FILE" | sed -nE 's/.*`([a-f0-9]{7,})`.*/\1/p' | head -1)
+    if [ -z "$SOURCE_COMMIT" ]; then
+        echo "  [SKIP] CONTEXT_ANCHOR.md HEAD 行から source commit を抽出できませんでした"
+    elif ! git rev-parse "$SOURCE_COMMIT" >/dev/null 2>&1; then
+        echo "  [FAIL] anchor の source commit ($SOURCE_COMMIT) が git history に存在しません"
+        echo "         CONTEXT_ANCHOR.md の HEAD を最新の release commit に refresh してください"
+        exit 7
+    else
+        DRIFT=$(git rev-list "${SOURCE_COMMIT}..HEAD" --count 2>/dev/null || echo 0)
+        NON_DOCS=$(git diff --name-only "${SOURCE_COMMIT}..HEAD" 2>/dev/null | grep -vE '^(CONTEXT_ANCHOR\.md|docs/)' | wc -l | tr -d ' ')
+        if [ "$DRIFT" -le 1 ] && [ "$NON_DOCS" -eq 0 ]; then
+            echo "  [OK]   anchor drift = $DRIFT (≤1 intrinsic), source..HEAD は docs-only (CONTEXT_ANCHOR + docs/)"
+        else
+            echo "  [FAIL] anchor stale: drift=$DRIFT, non-docs-files=$NON_DOCS"
+            echo "         source commit: $SOURCE_COMMIT"
+            echo "         current HEAD : $(git rev-parse --short HEAD)"
+            echo "         §Source commit vs Document commit 規約 (CONTEXT_ANCHOR.md) で drift > 1 or 非 docs commit は stale 扱い"
+            echo "         → CONTEXT_ANCHOR.md §Verified Snapshot を最新値に refresh + 1 commit"
+            exit 7
+        fi
+    fi
 fi
 
 echo
