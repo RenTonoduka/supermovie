@@ -51,7 +51,7 @@ Roku 「{{AUTHORIZATION_QUOTE}}」で以下 {{AUTHORIZED_DECISION_COUNT}} 項目
 - `docs/reviews/**` (review artifact noise、Roku 別 archive 候補)
 - `docs/roadmap/FUTURE_FEATURES_REQUIREMENTS_v{{N}}.md` (別 PR で出す、release delta と将来構想の混在防止)
 
-`origin/main` 側に上記 exclude path が存在しないため、`git rm` で release branch から削除すれば final diff から消える。
+`{{BASE_HAS_EXCLUDE_PATHS}}` (例: `origin/main` 側に上記 exclude path が存在しない場合)、`git rm` で release branch から削除すれば final diff から消える。base branch に exclude path が既に存在する場合は別 strategy (revert / cherry-pick / 別 worktree 切り出し) が必要。
 
 ## Required Gates (Draft PR 開始は composite gate のみで可、merge 前に Roku machine で実 e2e 実行必須)
 

@@ -12,7 +12,7 @@
 - (実装した item を列挙、Codex consult / review cycle ごとの commit hash + 内容)
 - 例:
   - **Phase X-A 完了**: 主要変更 ({{COMMIT_RANGE}}、{{N_COMMITS}} commits)
-  - **Codex consult/review N cycle 全消化**: 最終 verdict NONE
+  - **Codex consult/review {{CYCLE_COUNT}} cycle 全消化**: 最終 verdict NONE
   - **Draft PR 作成**: {{PR_URL}} (Claude 自走可で実行、Roku 授権済)
 
 ## In Progress
@@ -62,7 +62,7 @@
   - Codex review が走っているだけで待機終了する
 
 - **{{TIMESTAMP}} Roku Authorized Decisions** (CONTEXT_ANCHOR.md §Roku Authorized Decisions 参照):
-  - (5 項目を簡潔に記述)
+  - ({{AUTHORIZED_DECISION_COUNT}} 項目を簡潔に記述)
 
 ## Key Context
 
@@ -81,7 +81,7 @@
 | 時刻 | cycle | verdict | output path |
 |---|---|---|---|
 | {{TIME1}} | session resume consult | sequence 取得 | {{OUT1}} |
-| {{TIME2}} | 1st review | P0 N / P1 N / P2 N | {{OUT2}} |
+| {{TIME2}} | 1st review | P0 {{P0_COUNT}} / P1 {{P1_COUNT}} / P2 {{P2_COUNT}} | {{OUT2}} |
 | ... | ... | ... | ... |
 | {{TIMEn}} | Nth review | **NONE / Draft PR 開始 yes** | {{OUTn}} |
 
