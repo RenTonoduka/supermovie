@@ -3718,6 +3718,80 @@ def test_visual_smoke_out_dir_mkdir_error_emits_tail() -> None:
         _shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def test_observability_redact_secret_long_value_keeps_last_4() -> None:
+    """PR-H: 長い secret value (e.g. API key) は last-4 char 残し以外を mask する contract 検証。
+
+    docs/OBSERVABILITY.md §Redaction Rules secret class 「最後 4 文字以外を mask」rule の実装。
+    """
+    from _observability import redact_secret
+
+    # 通常 case (`sk-ant-` prefix + 30+ char body)
+    api_key = "sk-ant-api03-AbCdEf1234567890XyZwVuTsRq"
+    redacted = redact_secret(api_key)
+    assert redacted.endswith(api_key[-4:]), \
+        f"redact_secret should keep last 4 chars, got {redacted!r}"
+    assert redacted[:-4] == "*" * (len(api_key) - 4), \
+        f"redact_secret should mask all but last 4, got {redacted!r}"
+    assert api_key[:5] not in redacted, "raw prefix should not leak"
+    # 長さ保持 (length leak 自体は contract 上 OK、redaction.applied_rules で意図表明)
+    assert len(redacted) == len(api_key)
+
+
+def test_observability_redact_secret_short_value_full_mask() -> None:
+    """PR-H: 短い value (last_n+1 以下) は全 mask、value partial leak 防止。
+
+    secret が偶然 4 char しかない場合、last-4 ルールだと raw 全文が出てしまう。
+    contract として short value は全 mask に倒す。
+    """
+    from _observability import redact_secret
+
+    assert redact_secret("abcd") == "****"  # ちょうど 4 char → 全 mask
+    assert redact_secret("abc") == "***"
+    assert redact_secret("abcde") == "*****"  # 5 char (last_n+1) → 全 mask
+    assert redact_secret("abcdef") == "**cdef"  # 6 char → mask 2 + last 4
+
+
+def test_observability_redact_secret_non_string_passthrough() -> None:
+    """PR-H: non-string (None / int / dict 等) はそのまま return、TypeError を吐かない。"""
+    from _observability import redact_secret
+
+    assert redact_secret(None) is None
+    assert redact_secret("") == ""
+    assert redact_secret(12345) == 12345  # int は passthrough
+    assert redact_secret([]) == []
+
+
+def test_observability_redact_secret_custom_last_n_and_mask_char() -> None:
+    """PR-H: last_n / mask_char カスタマイズが効くこと (caller 側で表現変更可能)。"""
+    from _observability import redact_secret
+
+    # last_n=8 で長め保持
+    assert redact_secret("sk-ant-api03-AbCdEf1234567890", last_n=8) == \
+        "*" * (len("sk-ant-api03-AbCdEf1234567890") - 8) + "34567890"
+    # mask_char で異 char (downstream parser で `[REDACTED]` 使う等)
+    assert redact_secret("abcdefgh", last_n=4, mask_char="x") == "xxxxefgh"
+
+
+def test_observability_redact_secret_last_n_zero_or_negative_full_mask() -> None:
+    """PR-H fix iter (Codex 00:02 P1): last_n=0 / 負値で raw leak しない。
+
+    Python slice の value[-0:] は value[0:] = 全文を返すため、custom param で 0 や
+    負値が渡されると raw value が尾に連結されて leak。fail-closed で全 mask に倒す。
+    """
+    from _observability import redact_secret
+
+    # last_n=0: 全 mask
+    assert redact_secret("abcdefgh", last_n=0) == "********"
+    # last_n=-1: 全 mask (defensive)
+    assert redact_secret("abcdefgh", last_n=-1) == "********"
+    # raw value は1文字も末尾に出ないこと
+    redacted_zero = redact_secret("sk-1234567890", last_n=0)
+    assert "sk" not in redacted_zero
+    assert "1234" not in redacted_zero
+    assert "7890" not in redacted_zero
+    assert redacted_zero == "*" * len("sk-1234567890")
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -3793,6 +3867,12 @@ def main() -> int:
         test_compare_telop_split_error_message_redacted,
         test_compare_telop_split_exit_code_propagates,
         test_visual_smoke_out_dir_mkdir_error_emits_tail,
+        # PR-H (helper-level secret redaction、Codex 23:58 approve): 5 件 (4 feat + 1 fix iter boundary)
+        test_observability_redact_secret_long_value_keeps_last_4,
+        test_observability_redact_secret_short_value_full_mask,
+        test_observability_redact_secret_non_string_passthrough,
+        test_observability_redact_secret_custom_last_n_and_mask_char,
+        test_observability_redact_secret_last_n_zero_or_negative_full_mask,
     ]
     failed = []
     for t in tests:
