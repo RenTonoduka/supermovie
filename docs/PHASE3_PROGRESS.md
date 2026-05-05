@@ -138,9 +138,10 @@ main
 - supermovie-se 統合 (素材判断)
 - SadTalker / HeyGen / Kling 統合 (法的 / モラルリスク + API 課金)
 
-## 全 commit count (roku/phase3j-timeline branch、最新 109 件)
+## 全 commit count (roku/phase3j-timeline branch、最新 110 件)
 
 ```
+7e4b328 docs+gate(phase3): check_release_ready.sh に gate 7 (anchor drift) 追加 + anchor §機械判定 を実装済 に書き換え + refresh anchor/note to 6e89ef5 / 127 / 109 + PROGRESS regen (Codex 12:54 consult Step 3)
 6e89ef5 docs(phase3): add Source vs Document commit 規約 to anchor (drift 1 intrinsic / drift 2+ stale 機械判定 sketch、Codex 12:54 consult 推奨 Step 1) + refresh anchor/note to 4e21826 / 126 / 108 + PROGRESS regen
 4e21826 docs(phase3): refresh anchor + release note to 4528a6b / 125 commits + Required Gates 文言を Draft PR 開始 / merge 前必須で区別 + gh auth Codex sandbox 観察 + PROGRESS regen (drift 1)
 4528a6b docs(phase3): refresh anchor + release note to 7438df5 / 124 commits + PROGRESS regen (drift 1)
@@ -252,7 +253,7 @@ e2a1a39 fix(timeline): Codex Phase 3-J review 4 件 fix (P1×1 + P2×2 + P3×1)
 66e2aeb feat(timeline): timeline.py 共通化 + Phase 3-I review 6 件 fix (Phase 3-J)
 ```
 
-(更新: 2026-05-05_13:02、source=HEAD、`scripts/regen_phase3_progress.sh` で auto-gen。
+(更新: 2026-05-05_13:03、source=HEAD、`scripts/regen_phase3_progress.sh` で auto-gen。
 本 script で regen → docs commit する形のため、docs 上の commit chain は
 docs commit を作る前の HEAD を反映する設計 (off-by-one は intrinsic、
 `--verify` mode で count drift を CI 検査可)。)
