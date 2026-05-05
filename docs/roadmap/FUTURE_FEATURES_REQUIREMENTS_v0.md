@@ -117,7 +117,7 @@
 
 ## 4. 技術選定マトリクス v0
 
-評価凡例: 品質は「公開ベンチあり」は数値優先、「公開ベンチ未確認」は demo / API 仕様ベースの暫定評価。統合難度は API / file format / setup の観点。Codex consult (CODEX_FUTURE_FILLIN 20260505T094327) で全セル citation 付き、一次情報中心、一部は第三者 (G2 / Renderful 等) または報道として明示 (URL は §9 References)。
+評価凡例: 品質は「公開ベンチあり」は数値優先、「公開ベンチ未確認」は demo / API 仕様ベースの暫定評価。統合難度は API / file format / setup の観点。Codex consult (CODEX_FUTURE_FILLIN 20260505T094327) で fill-in した cell は [S*] citation 付き (一次情報中心、一部は第三者 G2 / Renderful 等または報道として明示)、§9 References。既存 supermovie 採用 OSS (VOICEVOX 等) は public_reference 公式 repo / 採用済み事実で代替 (本 doc 内 [S*] index 不要)。
 
 ### 4.1 AI アバター (Phase 6 候補)
 
