@@ -16,7 +16,7 @@ main
  │     : Phase 3-H per-segment <Sequence> + 9 件 fix + vstack letterbox
  ├─ roku/phase3i-transcript-alignment
  │     : Phase 3-I transcript timing alignment + cut-aware mapping
- └─ roku/phase3j-timeline (HEAD)
+ └─ roku/obs-rate-alias (HEAD)
        : Phase 3-J timeline.py 共通化 + 6 件 fix
        : Phase 3-K core 1 integration smoke test
        : Phase 3-K core 2 build_slide / build_telop transcript validation
@@ -138,12 +138,21 @@ main
 - supermovie-se 統合 (素材判断)
 - SadTalker / HeyGen / Kling 統合 (法的 / モラルリスク + API 課金)
 
-## 全 commit count (roku/phase3j-timeline branch、最新 131 件)
+## 全 commit count (roku/obs-rate-alias branch、最新 140 件)
 
 ```
-5cd3726 fix(observability): build_slide/build_telop error path emit (Codex 21:46 PR6 review P1)
-a78137d docs(phase3): refresh anchor/progress to 3e8137b / 147 — PR-C build_slide + build_telop v1 source 反映
-3e8137b feat(observability): build_slide_data + build_telop_data v1 — user_content default redact (PR-C、step 3 part 3/3)
+e7dc2bf fix: PR-D fix iter 5 — Codex 22:30 P2×2 (regen 動的 branch / Migration table wording)
+fdccad7 docs(phase3): refresh anchor/progress to 86abf83 / 156 — PR-D fix iter 4 (P2×3 Codex 22:23)
+86abf83 docs: PR-D fix iter 4 — Codex 22:23 P2×3 (v0 gap section legacy 化 / Test wording / anchor branch label)
+8808f6e docs(phase3): refresh anchor/progress to b837430 / 154 — PR-D fix iter 3 (P2×2 Codex 22:14)
+b837430 docs(observability): PR-D fix iter 3 — Codex 22:14 P2×2 (line 11/24/125/134/139/143/210/226 stale 解消)
+ab9fde0 docs(phase3): refresh anchor/progress to 5a5238c / 152 — PR-D fix iter 2 (P2 #1 Codex 22:11)
+5a5238c docs(observability): PR-D fix iter 2 — Codex 22:11 P2 #1 (後段 stale migration 記述解消)
+abd980f docs(phase3): refresh anchor/progress to 6b15953 / 150 — PR-D fix iter (P2×2 Codex 22:05)
+6b15953 fix(observability): PR-D fix iter — P2×2 (Codex 22:05 verdict)
+ca5093c docs(phase3): refresh anchor/progress to b862281 / 148 — PR-D rate alias source 反映
+b862281 feat(observability): rate env v0 → v1 alias 実装 (PR-D、Codex 21:54 next priority verdict)
+b52fd97 feat(observability): build_slide_data + build_telop_data v1 — user_content redact (PR-C、step 3 part 3/3) (#6)
 b5bf3dc feat(observability): preflight_video v1 — 既存 stdout source JSON 維持 + --json-log tail (PR-B、step 3 part 2/3) (#5)
 a6a6cc6 feat(observability): helper hardening + compare_telop_split + visual_smoke v1 (PR-A、step 3 part 1/3) (#4)
 eede8a1 feat(observability): _observability.py helper + slide-plan/narration v1 refactor + regression test (#3)
@@ -274,7 +283,7 @@ e2a1a39 fix(timeline): Codex Phase 3-J review 4 件 fix (P1×1 + P2×2 + P3×1)
 66e2aeb feat(timeline): timeline.py 共通化 + Phase 3-I review 6 件 fix (Phase 3-J)
 ```
 
-(更新: 2026-05-05_21:50、source=HEAD、`scripts/regen_phase3_progress.sh` で auto-gen。
+(更新: 2026-05-05_22:33、source=HEAD、`scripts/regen_phase3_progress.sh` で auto-gen。
 本 script で regen → docs commit する形のため、docs 上の commit chain は
 docs commit を作る前の HEAD を反映する設計 (off-by-one は intrinsic、
 `--verify` mode で count drift を CI 検査可)。)
@@ -288,10 +297,11 @@ npm run test:timeline  # pure python integration smoke 単独 (engine 不要、C
 npm run visual-smoke   # 実 main.mp4 + node_modules 必要、3 format × 2 frame still
 ```
 
-`test:timeline` は **43 test ケース** (Phase 3-A〜3-V 23 + post-freeze 第1弾 voicevox sentinel
+`test:timeline` は **52 test ケース** (Phase 3-A〜3-V 23 + post-freeze 第1弾 voicevox sentinel
 4 + 第2弾 visual_smoke 4 + json-log success/skip/strict 3 + cli mismatch+restore 1 + 第3弾 P2
-cost guard 5 + P2 review regression 2 + slide-plan json-log 1 累積、最新 P3 logging extension
-反映時点) で timeline.py / 4 script + visual_smoke の連鎖を engine 不要で高速検証 (新規
+cost guard 5 + P2 review regression 2 + slide-plan json-log 1 + obs migration 9 (PR #3 + PR-A/B/C
+helper / safe_artifact_path / user_content_meta / provider_body redact / build_status v1) +
+PR-D rate alias 1 = 52 累積) で timeline.py / 7 script + visual_smoke の連鎖を engine 不要で高速検証 (新規
 commit 後の regression 早期検出用)。test 一覧は `scripts/test_timeline_integration.py` の
 `main()` 末尾参照。`npm run test` は実際には `lint && test:timeline && test:react` を順次
 実行 (template/package.json:41 で確認、Phase 3-S 以降 React vitest も統合)。test:react は
