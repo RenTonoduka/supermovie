@@ -1,14 +1,13 @@
 # SuperMovie Phase 3 Release Note (2026-05-04 → 2026-05-05)
 
-`roku/phase3j-timeline` source commit HEAD: `cad6914` (anchor 自身の document commit は drift 1 intrinsic、CONTEXT_ANCHOR.md §Source commit vs Document commit 規約 参照) (Codex CODEX_REVIEW_PHASE3V_FINAL 20260505T064250
-で「P0/P1/P2 なし、Phase 3-V production 品質で止めてよい」 verdict 後、post-freeze
+`roku/fixture-normalize-recipe` source commit HEAD: `aa244bd` (anchor 自身の document commit は drift 1 intrinsic、CONTEXT_ANCHOR.md §Source commit vs Document commit 規約 参照、Phase 3-V FINAL の元 source `cad6914` から source commit ベースで 4 件積上げ = b1 fixture normalize bundle [9a37873] + Codex 19:39 PR review fix iter [5ce2bc5] + 19:53 re-review fix iter 2 [983edc4] + 20:04 3rd review fix iter 3 [aa244bd]、それぞれに anchor refresh commit が docs-only で続くため `cad6914..aa244bd` raw count は source 4 + anchor refresh 4 = 8 となる、anchor refresh は除外規則で source 進捗から除く)。Codex CODEX_REVIEW_PHASE3V_FINAL 20260505T064250 で「P0/P1/P2 なし、Phase 3-V production 品質で止めてよい」 verdict 後、post-freeze
 backlog 第 1〜3 弾 + P3 logging extension + Codex 4 cycle re-review (P5/2nd-batch/P2/P3-slide-plan
 全 P0/P1 NONE) を反映、Codex CODEX_FULL_SESSION_REVIEW 20260505T113913 で「過剰実装、
-P5 sentinel 以降は黄信号」と判定)
+P5 sentinel 以降は黄信号」と判定。さらに b1 fixture normalize bundle (Codex 18:36 verdict + 18:55 review + 19:39 PR review fix iter + 19:53 re-review fix iter 2 + 20:04 3rd review fix iter 3) を追加。
 
-Phase 3-A 〜 Phase 3-V の自走実装結果 + 後続 post-freeze backlog 第 1〜3 弾。本 note は
-Roku 不在モード中に Claude+Codex 協働で 112 commit (`roku/phase3i-transcript-alignment..HEAD`、
-main..HEAD は 130 commit、Bash 実測) を積んだ成果物の release assertion を固定する目的。
+Phase 3-A 〜 Phase 3-V の自走実装結果 + 後続 post-freeze backlog 第 1〜3 弾 + b1 fixture normalize bundle。本 note は
+Roku 不在モード中に Claude+Codex 協働で 120 commit (`roku/phase3i-transcript-alignment..HEAD`、
+main..HEAD は 138 commit、Bash 実測) を積んだ成果物の release assertion を固定する目的。
 
 ## Release-readiness statement (2026-05-05 時点、技術 readiness のみ)
 
@@ -24,13 +23,15 @@ main..HEAD は 130 commit、Bash 実測) を積んだ成果物の release assert
 
 Roku 判断領域 (release blocker 候補):
 - ★ PR / merge 戦略: phase3f→g→h→i→j は ancestry 連結済み、技術的に階層 merge
-  不要。Codex 推奨は `roku/phase3j-timeline` を 1 PR / squash merge。`main..HEAD`
-  は 130 commits (Bash 実測)、PR diff は phase3i..HEAD の 112 commits より大きく見える点に注意。
+  不要。Codex 推奨は `roku/phase3j-timeline` を 1 PR / squash merge。本 branch
+  `roku/fixture-normalize-recipe` (HEAD `aa244bd`、b1 fixture normalize bundle 込) では
+  `main..HEAD` は **138 commits**、`phase3i..HEAD` は **120 commits** (Bash 実測 20:04)。
   upstream `RenTonoduka/supermovie` (Roku 所有でない、現 gh account `blessing1031r-dotcom`
   は READ only、Bash 実測) のため Codex 推奨は **Option A: fork → blessing1031r-dotcom →
   upstream PR** (CODEX_FULL_SESSION_REVIEW 20260505T113913 §推奨理由、release branch 外、commit history で参照可)。
+  ※ Roku 18:06 訂正後の現解釈: completion 条件 = local 再現性、upstream PR は optional_later (CONTEXT_ANCHOR §External Actions Mission frame 注記)。fork-internal PR (本 PR url) で完結可。
 - 実 project (main.mp4 + node_modules + remotion installed) で
-  `npm run test:visual-smoke` と `npm run render` を 1 周通すことが推奨。
+  `npm run test:visual-smoke` と `npm run render` を 1 周通すことが推奨。本 PR では proj1 で b1 fixture (HEVC HDR DoVi 4K) 経由で完走実証 (`b1 fixture normalize evidence trail` section 参照)。
 - 5/13 リリース予定なら本 branch を Roku の最終 e2e 後に main へ。
 
 ## 主要 deliverable (Phase 3-F 〜 3-Q)
@@ -166,6 +167,70 @@ bash scripts/regen_phase3_progress.sh --verify  # docs drift 検査 (CI guard)
 各 review の対象 commit + verdict + fix commit の対応は `docs/PHASE3_PROGRESS.md` の
 Codex review 履歴 table 参照。release-ready 判定 (CODEX_FINAL_VERIFY 20260504T231638) +
 post-freeze loop closure (CODEX_P5_REREVIEW 20260505T101835) で 2 段階 close。
+
+## b1 fixture normalize evidence trail (2026-05-05 18:42-18:55)
+
+Phase 3 release `Required Gates` (本 doc §test gate コマンド) のうち merge 前必須の `npm run test:visual-smoke` + `npm run render` を、proj1 fixture (HEVC Main 10 / HLG / DoVi profile 8.4 / Display Matrix rotation -90 / 4K 60fps 41.93s / 458MB) に対して実行した evidence trail。
+
+### Codex consult / verdict (Bash 実測 18:36)
+- 18:36 Codex Q3 verdict accept (`/tmp/codex_b1_verdict.txt` 19,183 line / 157,913 tokens): b1 transcode (HEVC HDR DoVi → H.264 SDR、tonemap=mobius、scale=lanczos、libx264 preset=medium crf=18 high@4.2、AAC 192kbps、CFR 60fps) を canonical action と確定。Q1 / Q2 (PR base location ベースの invariant 違反判定 / fork-internal merge を canonical strategy 化) は acceptance gate `feedback_codex_output_acceptance_gate.md` で reject (Roku 18:06 mission frame 訂正と矛盾)。
+- 18:55 Codex review verdict (`/tmp/codex_b1_review_verdict.txt` 20,743 line / 115,099 tokens) **PASS**: P0=0、P1×2 (transcode/remux recipe を script 化 + Display Matrix 除去 ffprobe gate / pixel・color metadata 明文化)、P2×2 (anchor の PR optional_later 化 / evidence trail 追加)。本 commit はその全件 fix。
+
+### 実装結果 (Bash 実測 18:42-18:55)
+- transcode: source 458M → main_orig_hevc_hdr.mp4 (backup 保全) → 1080x1920 H.264 High SDR bt709 60fps CFR 2516 frames AAC 197kbps stereo (352M)
+- remux: `-display_rotation 0` 入力 + `-map_metadata:s:v:0 -1` で Display Matrix 除去、Ambient viewing environment metadata のみ残存 (irrelevant)
+- preflight 再走行: risks=[]、requiresConfirmation=false、color=bt709 hdr_suspect=false dovi=null
+- visual-smoke: youtube/short/square × 30/90 frame = 6/6 stills mismatched=0 env_error=None (過去の still_failed 解消)
+- render: 全 2516/2516 frames encoded → out/video.mp4 357M H.264 High yuvj420p 1080x1920 60fps 2516 frames 41.93s + AAC 48kHz stereo 317kbps、5min 8sec (1651s user / 548% CPU)
+- 抽出 stills 1s/10s/25s/40s 全 1080x1920 portrait (orientation 整合)
+
+### completion 条件 (Roku 18:06 訂正) との対応
+- Roku 真の完了条件 = Roku 環境/fork/local project で SuperMovie pipeline を再現可能にし実証
+- 達成: ✓ proj1 で preflight → visual-smoke → render が H.264 SDR fixture で完走、out/video.mp4 生成
+- upstream PR 処理 (8 件 RenTonoduka/supermovie open) は completion 条件**外** (optional_later、Roku 領域)
+
+### 後続 (本 PR scope)
+- `template/scripts/normalize_fixture.sh` で b1 transcode + remux を idempotent recipe 化、ffprobe gate 内蔵 (Display Matrix 不在を fail 条件)
+- `CONTEXT_ANCHOR.md` External Actions table を mission frame 反映 (upstream PR を optional_later に明示)
+- 本 evidence section で b1 trail を anchor 化
+
+### pixel / color metadata 仕様 (現状許容)
+- proj1 render output: `pix_fmt=yuvj420p` / `color_space=bt470bg` / `color_transfer=null` / `color_primaries=null`
+- 入力 main.mp4: `pix_fmt=yuv420p` / `color_space=bt709` / `color_transfer=bt709` / `color_primaries=bt709`
+- 差分は Remotion 4.0.403 default の挙動。`Config.setPixelFormat` / `Config.setColorSpace` (`@remotion/cli/dist/config/index.d.ts:216,284`) で寄せる選択肢ありだが、現状 player 互換性影響不明のため本 PR では設定変更しない。後続 PR で必要なら追加検証。
+
+### normalize_fixture.sh 実行例 + 期待 status
+
+```bash
+# proj1 fixture (HEVC HDR DoVi 4K) を idempotent 正規化
+cd <PROJECT>
+bash template/scripts/normalize_fixture.sh public/main.mp4
+
+# 既に正規化済みなら no-op
+bash template/scripts/normalize_fixture.sh public/main.mp4
+# → "[normalize] skip: ... already H.264 SDR + no Display Matrix + risks=[]"
+
+# 別 fixture / 別 format target
+bash template/scripts/normalize_fixture.sh /path/to/source.MP4 --format short
+bash template/scripts/normalize_fixture.sh /path/to/source.MP4 /path/to/output.mp4 --format youtube
+```
+
+期待 exit / status:
+- `0`: 正規化完了 (新規 transcode + remux または idempotent skip)、`OUTPUT`(default `<input dir>/main.mp4`) に H.264 SDR / Display Matrix 不在 / risks=[] が write 済 + backup `main_orig_<codec>_<color>.mp4` 作成 (in-place 時のみ)
+- `2`: usage error (input 不在 / `--format` 値欠落 / unknown arg)
+- `3`: ffprobe gate 失敗 (Display Matrix 残存)、または preflight が空 JSON 返却
+- `4`: post-normalize risks 残存 (transcode chain で扱えない種別: `rotation-non-canonical` / `interlaced` / `multiple-or-missing-*` / `non-square-sar` 等)
+- 非 0 (above 以外): preflight 内部エラー (ffprobe 不在等) を bubble up
+
+post-condition (script 内蔵 ffprobe + preflight gate):
+- `Display Matrix` side data 不在 (exit 3 fail 条件)
+- preflight 再走行で `risks=[]` (exit 4 fail 条件、strict)
+
+artifact 内部証跡 (PR body 外):
+- `/tmp/codex_b1_verdict.txt` (Codex 18:36 verdict 19,183 line / 157,913 tokens)
+- `/tmp/codex_b1_review_verdict.txt` (Codex 18:55 review verdict 20,743 line / 115,099 tokens)
+- `/tmp/codex_pr1_review_verdict.txt` (Codex 19:39 PR review verdict 3,574 line / 117,712 tokens)
+これらはローカル一時 artifact のため reviewer から読めない。trail 化する場合は repo 外に commit 不要、本 doc の記述を一次 evidence とする。
 
 ## 既知の限界 / 後続 phase 候補
 

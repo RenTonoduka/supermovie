@@ -138,16 +138,18 @@ main
 - supermovie-se 統合 (素材判断)
 - SadTalker / HeyGen / Kling 統合 (法的 / モラルリスク + API 課金)
 
-## 全 commit count (roku/phase3j-timeline branch、最新 120 件)
+## 全 commit count (roku/phase3j-timeline branch、最新 122 件)
 
 ```
-8267628 docs(observability): add :351 non-429 body partial line to migration target (Codex 20:23 3rd review P2)
-c12b3fd docs(phase3): refresh anchor/progress to 322e7b9 / 136 / 118 — Codex 20:14 re-review fix iter 反映
-322e7b9 fix(observability): mapping completeness + redaction default strict + migration line numbers (Codex 20:14 re-review P1+P2)
-edb0e98 docs(phase3): refresh anchor/progress to 64bce34 / 134 / 116 — Codex 20:08 review fix iter 反映
-64bce34 fix(observability)+docs(phase3): v0→v1 status mapping + redaction strict + mission frame patch (Codex 20:08 review P1)
-05139c8 docs(phase3): refresh anchor/progress to 61bf8b5 / 132 / 114 — observability doc PR ベース
-61bf8b5 docs(observability): add SuperMovie Observability Contract (Tech 改善 Medium #3、Codex 19:50 scope)
+1bc7bf5 fix(normalize_fixture)+docs(phase3): archive collision + inferred fallback strict + release note stale (Codex 20:14 4th review P2)
+a429783 docs(phase3): refresh anchor/note/progress to aa244bd / 138 / 120 — Codex 20:04 3rd review fix iter 3 反映 + release note 冒頭 stale 解消
+aa244bd fix(normalize_fixture): early --format validation + RISKS-aware idempotent skip + stale backup collision (Codex 20:04 3rd review P2)
+aad745b docs(phase3): refresh anchor/progress to 983edc4 / 136 / 118 — Codex 19:53 PR re-review fix iter 2 反映
+983edc4 fix(normalize_fixture)+docs(phase3): path normalize + mktemp -d temp dir + strict post-risks (Codex 19:39 PR re-review fix iter 2)
+acd15dd docs(phase3): refresh anchor/progress to 5ce2bc5 / 134 / 116 — Codex 19:39 PR review fix iter 反映
+5ce2bc5 fix(normalize_fixture)+docs(phase3): preflight exit 2 tolerance + arg/temp/anchor harden (Codex 19:39 PR review fix)
+41f9ef6 docs(phase3): refresh anchor/progress to 9a37873 / 132 / 114 — anchor drift = 1 intrinsic 復帰 + b1 e2e PASS 行追加
+9a37873 scripts+docs(phase3): b1 fixture normalize recipe + anchor mission frame patch (Codex 18:55 P1/P2 fix)
 8310a4c docs(phase3): refresh anchor/note to cad6914 / 130 / 112 + PROGRESS regen — gate 7 を pass させる anchor refresh (前 commit の scripts 修正 cad6914 が non-docs のため drift 1 intrinsic 復帰)
 cad6914 docs+gate(phase3): gate 7 SKIP→exit 7 (anchor 欠落/parse 失敗 P1 扱い) + anchor fork remote 行 + 6 gate→7 gate 表記 統一 + refresh anchor/note to f6e89ef / 129 / 111 (Codex hardening review P1×2 + P2 fix)
 f6e89ef docs(phase3): refresh anchor/note to 7e4b328 / 128 / 110 + PROGRESS regen — gate 7 (anchor drift) を pass させる anchor refresh、§Source commit vs Document commit 規約 drift 1 intrinsic 復帰
@@ -263,7 +265,7 @@ e2a1a39 fix(timeline): Codex Phase 3-J review 4 件 fix (P1×1 + P2×2 + P3×1)
 66e2aeb feat(timeline): timeline.py 共通化 + Phase 3-I review 6 件 fix (Phase 3-J)
 ```
 
-(更新: 2026-05-05_20:25、source=HEAD、`scripts/regen_phase3_progress.sh` で auto-gen。
+(更新: 2026-05-05_20:16、source=HEAD、`scripts/regen_phase3_progress.sh` で auto-gen。
 本 script で regen → docs commit する形のため、docs 上の commit chain は
 docs commit を作る前の HEAD を反映する設計 (off-by-one は intrinsic、
 `--verify` mode で count drift を CI 検査可)。)
