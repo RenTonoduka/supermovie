@@ -810,26 +810,27 @@ def test_generate_slide_plan_api_mock_success() -> None:
             gsp.PROJ = original_proj
 
 
-def test_generate_slide_plan_api_http_error() -> None:
-    """generate_slide_plan API mock: HTTP error → exit 4."""
+def test_generate_slide_plan_api_rate_limited_429() -> None:
+    """Phase 3-V P2 cost guard (Codex CODEX_P2_COST_GUARD_DESIGN §1 / §2.5):
+    HTTP 429 は exit 9 (rate_limited) で分離、retry-after 表示。"""
     import generate_slide_plan as gsp
     import os as _os
     import urllib.error as _urlerr
     import urllib.request as _urlreq
     from io import BytesIO
 
-    def mock_urlopen_http_error(req, timeout=60):
+    def mock_urlopen_429(req, timeout=60):
         raise _urlerr.HTTPError(
             "https://api.anthropic.com/v1/messages",
             429,
             "Rate Limit",
-            {},
+            {"retry-after": "30"},
             BytesIO(b'{"error": {"type": "rate_limit_error"}}'),
         )
 
     original_urlopen = _urlreq.urlopen
     original_proj = gsp.PROJ
-    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")  # Codex P2 #2 反映
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")
 
     with tempfile.TemporaryDirectory() as tmp:
         proj = Path(tmp)
@@ -843,14 +844,349 @@ def test_generate_slide_plan_api_http_error() -> None:
             encoding="utf-8",
         )
         _os.environ["ANTHROPIC_API_KEY"] = "fake-key"
-        _urlreq.urlopen = mock_urlopen_http_error
+        _urlreq.urlopen = mock_urlopen_429
         try:
             import sys as _sys
             old_argv = _sys.argv
             _sys.argv = ["generate_slide_plan.py"]
             try:
                 ret = gsp.main()
-                assert_eq(ret, 4, "API HTTP error → exit 4")
+                assert_eq(ret, 9, "API 429 → exit 9 (rate_limited)")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            if original_api_key is None:
+                _os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                _os.environ["ANTHROPIC_API_KEY"] = original_api_key
+            _urlreq.urlopen = original_urlopen
+            gsp.PROJ = original_proj
+
+
+def test_generate_slide_plan_api_http_error_non_429() -> None:
+    """Phase 3-V P2 cost guard: 429 以外の HTTP error は exit 4 維持 (api_http_error)."""
+    import generate_slide_plan as gsp
+    import os as _os
+    import urllib.error as _urlerr
+    import urllib.request as _urlreq
+    from io import BytesIO
+
+    def mock_urlopen_500(req, timeout=60):
+        raise _urlerr.HTTPError(
+            "https://api.anthropic.com/v1/messages",
+            500,
+            "Internal Server Error",
+            {},
+            BytesIO(b'{"error": {"type": "internal_error"}}'),
+        )
+
+    original_urlopen = _urlreq.urlopen
+    original_proj = gsp.PROJ
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        gsp.PROJ = proj
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps({"words": [], "segments": []}),
+            encoding="utf-8",
+        )
+        (proj / "project-config.json").write_text(
+            json.dumps({"format": "short", "tone": "プロ"}),
+            encoding="utf-8",
+        )
+        _os.environ["ANTHROPIC_API_KEY"] = "fake-key"
+        _urlreq.urlopen = mock_urlopen_500
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["generate_slide_plan.py"]
+            try:
+                ret = gsp.main()
+                assert_eq(ret, 4, "API 500 → exit 4 (non-429 HTTP error)")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            if original_api_key is None:
+                _os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                _os.environ["ANTHROPIC_API_KEY"] = original_api_key
+            _urlreq.urlopen = original_urlopen
+            gsp.PROJ = original_proj
+
+
+def test_generate_slide_plan_dry_run_no_api_key() -> None:
+    """Phase 3-V P2: --dry-run は API key 不要、prompt 生成 + estimate JSON で exit 0."""
+    import generate_slide_plan as gsp
+    import os as _os
+    import urllib.request as _urlreq
+    import io as _io
+    import contextlib
+
+    def mock_urlopen_should_not_be_called(req, timeout=60):
+        raise AssertionError("--dry-run で urlopen が呼ばれた (期待: API skip)")
+
+    original_urlopen = _urlreq.urlopen
+    original_proj = gsp.PROJ
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        gsp.PROJ = proj
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps({
+                "words": [{"text": "hi", "start": 0, "end": 100}],
+                "segments": [{"text": "hi", "start": 0, "end": 100}],
+            }),
+            encoding="utf-8",
+        )
+        (proj / "project-config.json").write_text(
+            json.dumps({"format": "short", "tone": "プロ"}),
+            encoding="utf-8",
+        )
+        _os.environ.pop("ANTHROPIC_API_KEY", None)  # API key unset
+        _urlreq.urlopen = mock_urlopen_should_not_be_called
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["generate_slide_plan.py", "--dry-run"]
+            captured = _io.StringIO()
+            try:
+                with contextlib.redirect_stdout(captured):
+                    ret = gsp.main()
+                assert_eq(ret, 0, "dry-run exit 0")
+                stdout = captured.getvalue()
+                lines = [ln for ln in stdout.splitlines() if ln.strip()]
+                payload = json.loads(lines[-1])
+                assert_eq(payload.get("status"), "dry_run", "dry-run status field")
+                assert_eq(payload.get("api_called"), False, "api_called=false")
+                if "estimated_input_tokens" not in payload:
+                    raise AssertionError(f"missing estimated_input_tokens: {payload}")
+                if payload.get("estimation_method") != "ceil(prompt_chars/4)":
+                    raise AssertionError(
+                        f"unexpected estimation_method: {payload.get('estimation_method')}"
+                    )
+                # rate 未設定なら cost null
+                assert_eq(
+                    payload.get("estimated_cost_usd_upper_bound"), None,
+                    "no rate → cost null",
+                )
+            finally:
+                _sys.argv = old_argv
+        finally:
+            if original_api_key is None:
+                _os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                _os.environ["ANTHROPIC_API_KEY"] = original_api_key
+            _urlreq.urlopen = original_urlopen
+            gsp.PROJ = original_proj
+
+
+def test_generate_slide_plan_max_tokens_override_cli_env_precedence() -> None:
+    """Phase 3-V P2: --max-tokens CLI > env > default、body に反映."""
+    import generate_slide_plan as gsp
+    import os as _os
+    import urllib.request as _urlreq
+    from io import BytesIO
+
+    captured_body = {}
+
+    def mock_urlopen_capture(req, timeout=60):
+        captured_body["data"] = json.loads(req.data.decode("utf-8"))
+        # success response
+        resp_text = json.dumps({
+            "content": [{"type": "text", "text": json.dumps({
+                "version": "supermovie.slide_plan.v1",
+                "slides": [{"id": 1, "startWordIndex": 0, "endWordIndex": 0, "title": "t"}],
+            })}]
+        })
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def read(self): return resp_text.encode("utf-8")
+        return FakeResp()
+
+    original_urlopen = _urlreq.urlopen
+    original_proj = gsp.PROJ
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")
+    original_env_max = _os.environ.get("SUPERMOVIE_MAX_TOKENS")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        gsp.PROJ = proj
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps({"words": [{"text": "x"}], "segments": []}),
+            encoding="utf-8",
+        )
+        (proj / "project-config.json").write_text(
+            json.dumps({"format": "short"}), encoding="utf-8",
+        )
+        _os.environ["ANTHROPIC_API_KEY"] = "fake"
+        _urlreq.urlopen = mock_urlopen_capture
+        try:
+            # ケース 1: CLI override (--max-tokens=1000、env 設定あっても CLI 勝ち)
+            _os.environ["SUPERMOVIE_MAX_TOKENS"] = "2000"
+            import sys as _sys
+            old_argv = _sys.argv
+            output_path = proj / "slide_plan.json"
+            _sys.argv = [
+                "generate_slide_plan.py",
+                "--max-tokens", "1000",
+                "--output", str(output_path),
+            ]
+            try:
+                gsp.main()
+                assert_eq(captured_body["data"].get("max_tokens"), 1000, "CLI override")
+            finally:
+                _sys.argv = old_argv
+            # ケース 2: env のみ (CLI なし)
+            captured_body.clear()
+            _sys.argv = [
+                "generate_slide_plan.py",
+                "--output", str(output_path),
+            ]
+            try:
+                gsp.main()
+                assert_eq(captured_body["data"].get("max_tokens"), 2000, "env value applied")
+            finally:
+                _sys.argv = old_argv
+            # ケース 3: env も CLI もなし → default 4096
+            _os.environ.pop("SUPERMOVIE_MAX_TOKENS", None)
+            captured_body.clear()
+            _sys.argv = [
+                "generate_slide_plan.py",
+                "--output", str(output_path),
+            ]
+            try:
+                gsp.main()
+                assert_eq(captured_body["data"].get("max_tokens"), 4096, "default 4096")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            if original_api_key is None:
+                _os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                _os.environ["ANTHROPIC_API_KEY"] = original_api_key
+            if original_env_max is None:
+                _os.environ.pop("SUPERMOVIE_MAX_TOKENS", None)
+            else:
+                _os.environ["SUPERMOVIE_MAX_TOKENS"] = original_env_max
+            _urlreq.urlopen = original_urlopen
+            gsp.PROJ = original_proj
+
+
+def test_generate_slide_plan_max_tokens_cap_rejects() -> None:
+    """Phase 3-V P2: --max-tokens=16385 → cap 超過で exit 4."""
+    import generate_slide_plan as gsp
+    import os as _os
+
+    original_proj = gsp.PROJ
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        gsp.PROJ = proj
+        # 入力ファイル不要 (cost guard arg validation で先に exit 4)
+        _os.environ["ANTHROPIC_API_KEY"] = "fake"
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["generate_slide_plan.py", "--max-tokens", "16385"]
+            try:
+                ret = gsp.main()
+                assert_eq(ret, 4, "max-tokens 16385 (cap+1) → exit 4")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            if original_api_key is None:
+                _os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                _os.environ["ANTHROPIC_API_KEY"] = original_api_key
+            gsp.PROJ = original_proj
+
+
+def test_generate_slide_plan_max_input_caps_prompt() -> None:
+    """Phase 3-V P2: --max-input-words / --max-input-segments で prompt 入力 cap."""
+    import generate_slide_plan as gsp
+    import os as _os
+    import urllib.request as _urlreq
+
+    captured_body = {}
+
+    def mock_urlopen_capture(req, timeout=60):
+        captured_body["data"] = json.loads(req.data.decode("utf-8"))
+        resp_text = json.dumps({
+            "content": [{"type": "text", "text": json.dumps({
+                "version": "supermovie.slide_plan.v1",
+                "slides": [{"id": 1, "startWordIndex": 0, "endWordIndex": 0, "title": "t"}],
+            })}]
+        })
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def read(self): return resp_text.encode("utf-8")
+        return FakeResp()
+
+    original_urlopen = _urlreq.urlopen
+    original_proj = gsp.PROJ
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        gsp.PROJ = proj
+        # 3 words + 3 segments
+        (proj / "transcript_fixed.json").write_text(
+            json.dumps({
+                "words": [
+                    {"text": "alpha", "start": 0, "end": 100},
+                    {"text": "bravo", "start": 100, "end": 200},
+                    {"text": "charlie", "start": 200, "end": 300},
+                ],
+                "segments": [
+                    {"text": "first segment text", "start": 0, "end": 100},
+                    {"text": "second segment text", "start": 100, "end": 200},
+                    {"text": "third segment text", "start": 200, "end": 300},
+                ],
+            }),
+            encoding="utf-8",
+        )
+        (proj / "project-config.json").write_text(
+            json.dumps({"format": "short"}), encoding="utf-8",
+        )
+        _os.environ["ANTHROPIC_API_KEY"] = "fake"
+        _urlreq.urlopen = mock_urlopen_capture
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            output_path = proj / "slide_plan.json"
+            _sys.argv = [
+                "generate_slide_plan.py",
+                "--max-input-words", "2",
+                "--max-input-segments", "1",
+                "--output", str(output_path),
+            ]
+            try:
+                gsp.main()
+                prompt_text = captured_body["data"]["messages"][0]["content"]
+                # words[2] = "charlie" は cap で除外、words[0/1] は含まれる
+                if "charlie" in prompt_text:
+                    raise AssertionError(
+                        "--max-input-words=2 で 3rd word 'charlie' が prompt に残った"
+                    )
+                if "alpha" not in prompt_text or "bravo" not in prompt_text:
+                    raise AssertionError("first 2 words missing from prompt")
+                # segments[1+] = "second/third segment" は cap で除外
+                if "second segment" in prompt_text or "third segment" in prompt_text:
+                    raise AssertionError(
+                        "--max-input-segments=1 で 2nd/3rd segment が prompt に残った"
+                    )
+                if "first segment" not in prompt_text:
+                    raise AssertionError("first segment missing from prompt")
+                # max_input_words が prompt header にも反映 (200 → 2)
+                if "最大 2 word" not in prompt_text:
+                    raise AssertionError(
+                        f"prompt header に max_input_words={'2'} が反映されていない"
+                    )
             finally:
                 _sys.argv = old_argv
         finally:
@@ -1916,7 +2252,12 @@ def main() -> int:
         test_generate_slide_plan_skip_no_api_key,
         test_generate_slide_plan_missing_inputs,
         test_generate_slide_plan_api_mock_success,
-        test_generate_slide_plan_api_http_error,
+        test_generate_slide_plan_api_rate_limited_429,
+        test_generate_slide_plan_api_http_error_non_429,
+        test_generate_slide_plan_dry_run_no_api_key,
+        test_generate_slide_plan_max_tokens_override_cli_env_precedence,
+        test_generate_slide_plan_max_tokens_cap_rejects,
+        test_generate_slide_plan_max_input_caps_prompt,
         test_generate_slide_plan_api_invalid_json,
         test_build_slide_data_plan_validation_fallback,
         test_build_slide_data_plan_strict_failure,
