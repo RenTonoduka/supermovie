@@ -1547,6 +1547,76 @@ def test_voicevox_sentinel_rollback_on_concat_fail() -> None:
         vn.synthesize = original_synthesize
 
 
+def test_visual_smoke_patch_format_youtube_to_short() -> None:
+    """Phase 3-V post-freeze 第2弾 P4 (Codex CODEX_NEXT_PRIORITY:21-23):
+    visual_smoke.patch_format が videoConfig.ts の FORMAT 行を正しく書き換える."""
+    import visual_smoke as vs
+
+    src = "export const FORMAT: VideoFormat = 'youtube';\nexport const FPS = 30;\n"
+    out = vs.patch_format(src, "short")
+    if "export const FORMAT: VideoFormat = 'short';" not in out:
+        raise AssertionError(f"patch_format failed: {out!r}")
+    if "export const FORMAT: VideoFormat = 'youtube';" in out:
+        raise AssertionError(
+            f"patch_format left old FORMAT in content: {out!r}"
+        )
+    # 他行は破壊しない
+    if "export const FPS = 30;" not in out:
+        raise AssertionError(
+            f"patch_format broke unrelated lines: {out!r}"
+        )
+
+
+def test_visual_smoke_patch_format_no_match_raises() -> None:
+    """Phase 3-V P4: FORMAT 行不在で ValueError."""
+    import visual_smoke as vs
+
+    bad = "export const FPS = 30;\n// no FORMAT line\n"
+    raised = False
+    try:
+        vs.patch_format(bad, "short")
+    except ValueError:
+        raised = True
+    if not raised:
+        raise AssertionError("patch_format should raise ValueError on missing FORMAT")
+
+
+def test_visual_smoke_patch_format_round_trip() -> None:
+    """Phase 3-V P4: youtube → short → youtube round trip で原型に戻る."""
+    import visual_smoke as vs
+
+    src = "export const FORMAT: VideoFormat = 'youtube';\n"
+    step1 = vs.patch_format(src, "short")
+    step2 = vs.patch_format(step1, "youtube")
+    if step2 != src:
+        raise AssertionError(
+            f"round trip mismatch: src={src!r} step2={step2!r}"
+        )
+
+
+def test_visual_smoke_format_dims_completeness() -> None:
+    """Phase 3-V P4: FORMAT_DIMS が 3 format 全部を期待 dimension で持つ."""
+    import visual_smoke as vs
+
+    expected = {
+        "youtube": (1920, 1080),
+        "short": (1080, 1920),
+        "square": (1080, 1080),
+    }
+    for fmt, dims in expected.items():
+        if fmt not in vs.FORMAT_DIMS:
+            raise AssertionError(f"FORMAT_DIMS missing {fmt}")
+        if vs.FORMAT_DIMS[fmt] != dims:
+            raise AssertionError(
+                f"FORMAT_DIMS[{fmt}] = {vs.FORMAT_DIMS[fmt]}, expected {dims}"
+            )
+    # 余計な entry がない (3 format のみ)
+    if set(vs.FORMAT_DIMS.keys()) != set(expected.keys()):
+        raise AssertionError(
+            f"FORMAT_DIMS unexpected extras: {set(vs.FORMAT_DIMS.keys()) - set(expected.keys())}"
+        )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -1564,6 +1634,10 @@ def main() -> int:
         test_voicevox_sentinel_written_after_wav,
         test_voicevox_sentinel_write_fail_rollback,
         test_voicevox_sentinel_rollback_on_concat_fail,
+        test_visual_smoke_patch_format_youtube_to_short,
+        test_visual_smoke_patch_format_no_match_raises,
+        test_visual_smoke_patch_format_round_trip,
+        test_visual_smoke_format_dims_completeness,
         test_build_scripts_wiring,
         test_build_slide_data_main_e2e,
         test_build_slide_data_validates_bad_transcript,
