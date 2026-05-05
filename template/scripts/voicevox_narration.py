@@ -517,6 +517,12 @@ def main():
     ap.add_argument("--allow-partial", action="store_true",
                     help="一部 chunk synthesis 失敗でも narration.wav を出力 + narrationData.ts 部分書き出し "
                          "(default は全 chunk 成功必須)")
+    # Phase 3-V post-freeze 第2弾 P3 (Codex CODEX_NEXT_PRIORITY:15-18):
+    # 既存 stdout (human-readable print) を維持しつつ、--json-log で末尾に
+    # 1 行 純 JSON summary を emit (downstream tool が tail 1 行 parse 可)。
+    ap.add_argument("--json-log", action="store_true",
+                    help="末尾に summary を 1 行純 JSON として emit "
+                         "(downstream observability、既存 stdout は維持)")
     args = ap.parse_args()
 
     ok, info = check_engine()
@@ -751,6 +757,10 @@ def main():
         "engine_version": info,
     }
     print(f"\nsummary: {json.dumps(summary, ensure_ascii=False)}")
+    # Phase 3-V P3 (CODEX_NEXT_PRIORITY:15-18): --json-log で末尾に純 JSON 1 行
+    # (downstream tool が tail 1 行 parse 可、既存 "summary: {...}" 行は維持)
+    if args.json_log:
+        print(json.dumps(summary, ensure_ascii=False))
     return 0
 
 

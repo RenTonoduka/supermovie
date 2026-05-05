@@ -1547,6 +1547,100 @@ def test_voicevox_sentinel_rollback_on_concat_fail() -> None:
         vn.synthesize = original_synthesize
 
 
+def test_voicevox_json_log_emits_pure_json() -> None:
+    """Phase 3-V 第2弾 P3 (Codex CODEX_NEXT_PRIORITY:15-18):
+    --json-log flag で末尾 1 行に純 JSON summary が emit される."""
+    import voicevox_narration as vn
+    import io as _io
+    import contextlib
+
+    state = {
+        "PROJ": vn.PROJ,
+        "NARRATION_DIR": vn.NARRATION_DIR,
+        "NARRATION_DATA_TS": vn.NARRATION_DATA_TS,
+        "CHUNK_META_JSON": vn.CHUNK_META_JSON,
+        "NARRATION_LEGACY_WAV": vn.NARRATION_LEGACY_WAV,
+        "NARRATION_READY_JSON": vn.NARRATION_READY_JSON,
+    }
+    original_concat = vn.concat_wavs_atomic
+    original_check_engine = vn.check_engine
+    original_synthesize = vn.synthesize
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp)
+            vn.PROJ = proj
+            vn.NARRATION_DIR = proj / "public" / "narration"
+            vn.NARRATION_DATA_TS = proj / "src" / "Narration" / "narrationData.ts"
+            vn.CHUNK_META_JSON = vn.NARRATION_DIR / "chunk_meta.json"
+            vn.NARRATION_LEGACY_WAV = proj / "public" / "narration.wav"
+            vn.NARRATION_READY_JSON = proj / "public" / "narration.ready.json"
+            (proj / "src" / "Narration").mkdir(parents=True)
+            (proj / "src" / "videoConfig.ts").write_text(
+                make_videoconfig_ts(30), encoding="utf-8"
+            )
+            (proj / "transcript_fixed.json").write_text(
+                json.dumps({"segments": [{"text": "hi", "start": 0, "end": 1000}]}),
+                encoding="utf-8",
+            )
+
+            import wave as _wave
+            import struct as _struct
+
+            buf = _io.BytesIO()
+            with _wave.open(buf, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(22050)
+                w.writeframes(_struct.pack("<22050h", *([0] * 22050)))
+            wav_bytes = buf.getvalue()
+
+            vn.check_engine = lambda: (True, "0.0.0-test")
+            vn.synthesize = lambda text, speaker: wav_bytes
+            vn.concat_wavs_atomic = lambda wavs, out: out.write_bytes(wav_bytes)
+
+            captured = _io.StringIO()
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["voicevox_narration.py", "--json-log"]
+            try:
+                with contextlib.redirect_stdout(captured):
+                    ret = vn.main()
+            finally:
+                _sys.argv = old_argv
+
+            assert_eq(ret, 0, "main() exit 0 with --json-log")
+            stdout = captured.getvalue()
+            lines = [ln for ln in stdout.splitlines() if ln.strip()]
+            if not lines:
+                raise AssertionError("--json-log produced no stdout")
+            # 末尾行は純 JSON (prefix なし)
+            last = lines[-1]
+            try:
+                payload = json.loads(last)
+            except json.JSONDecodeError as e:
+                raise AssertionError(
+                    f"--json-log last line not pure JSON: {last!r} ({e})"
+                ) from e
+            # expected key 集
+            for key in ("speaker", "fps", "chunks", "total_chunks", "narration_ready_json"):
+                if key not in payload:
+                    raise AssertionError(
+                        f"--json-log missing expected key {key}: {payload}"
+                    )
+            # 既存 stdout (`summary: {...}` 行) も維持されている
+            if not any("summary:" in ln for ln in lines):
+                raise AssertionError(
+                    "existing 'summary:' line missing (should be preserved when --json-log set)"
+                )
+    finally:
+        for k, v in state.items():
+            setattr(vn, k, v)
+        vn.concat_wavs_atomic = original_concat
+        vn.check_engine = original_check_engine
+        vn.synthesize = original_synthesize
+
+
 def test_visual_smoke_patch_format_youtube_to_short() -> None:
     """Phase 3-V post-freeze 第2弾 P4 (Codex CODEX_NEXT_PRIORITY:21-23):
     visual_smoke.patch_format が videoConfig.ts の FORMAT 行を正しく書き換える."""
@@ -1634,6 +1728,7 @@ def main() -> int:
         test_voicevox_sentinel_written_after_wav,
         test_voicevox_sentinel_write_fail_rollback,
         test_voicevox_sentinel_rollback_on_concat_fail,
+        test_voicevox_json_log_emits_pure_json,
         test_visual_smoke_patch_format_youtube_to_short,
         test_visual_smoke_patch_format_no_match_raises,
         test_visual_smoke_patch_format_round_trip,
