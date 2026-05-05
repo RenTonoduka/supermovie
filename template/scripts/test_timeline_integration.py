@@ -3792,6 +3792,113 @@ def test_observability_redact_secret_last_n_zero_or_negative_full_mask() -> None
     assert redacted_zero == "*" * len("sk-1234567890")
 
 
+def test_voicevox_narration_summary_path_redacted_by_default() -> None:
+    """PR-I fix iter (Codex 00:13 P1 #1): voicevox_narration の human stdout summary JSON で
+    raw path leak しない (engine 不在で skip 経由しないため、内部 helper 関数を直接 audit)。
+
+    summary dict 構築箇所の path 4 fields が safe_artifact_path() 経由で redact されること。
+    """
+    from _observability import safe_artifact_path
+
+    proj = Path(tempfile.mkdtemp(prefix="vv_summary_redact_"))
+    try:
+        ts_path = proj / "src/Narration/narrationData.ts"
+        meta_path = proj / "narration_chunks_meta.json"
+        out_path = proj / "public/narration.wav"
+        ready_path = proj / "narration.ready.json"
+
+        # default (redact) — proj path が tmpdir 配下の絶対 path で、placeholder/相対化される
+        summary = {
+            "narration_wav": safe_artifact_path(out_path, project_root=proj, unsafe_keep_abs_path=False),
+            "narration_data_ts": safe_artifact_path(ts_path, project_root=proj, unsafe_keep_abs_path=False),
+            "chunk_meta_json": safe_artifact_path(meta_path, project_root=proj, unsafe_keep_abs_path=False),
+            "narration_ready_json": safe_artifact_path(ready_path, project_root=proj, unsafe_keep_abs_path=False),
+        }
+        rendered = json.dumps(summary, ensure_ascii=False)
+        # default redact: raw proj 絶対 path は出ない
+        assert str(proj) not in rendered, \
+            f"raw proj path leaked in default summary: {rendered!r}"
+
+        # unsafe-keep-abs-path: raw 出力
+        summary_unsafe = {
+            "narration_wav": safe_artifact_path(out_path, project_root=proj, unsafe_keep_abs_path=True),
+        }
+        rendered_unsafe = json.dumps(summary_unsafe, ensure_ascii=False)
+        assert str(out_path) in rendered_unsafe, \
+            f"unsafe-keep-abs-path should preserve raw path, got {rendered_unsafe!r}"
+    finally:
+        import shutil as _shutil
+        _shutil.rmtree(proj, ignore_errors=True)
+
+
+def test_build_slide_data_human_stdout_path_redacted_by_default() -> None:
+    """PR-I (Codex 00:08): build_slide_data の human stdout `path: ...` 行は default redact、
+    --unsafe-keep-abs-path で raw 切替。
+    """
+    import os as _os
+    import io
+    import sys as _sys
+    import importlib
+    import shutil as _shutil_mod
+    from contextlib import redirect_stdout, redirect_stderr
+
+    saved_argv = list(_sys.argv)
+    saved_cwd = _os.getcwd()
+
+    proj = Path(tempfile.mkdtemp(prefix="stdout_redact_"))
+    (proj / "transcript_fixed.json").write_text(
+        json.dumps({
+            "duration_ms": 5000,
+            "words": [{"text": "hi", "start": 0, "end": 500, "confidence": 0.9}],
+            "segments": [{"text": "hi", "start": 0, "end": 500}],
+        }),
+        encoding="utf-8",
+    )
+    (proj / "project-config.json").write_text(
+        json.dumps({"format": "youtube", "videoType": "test", "tone": "test"}),
+        encoding="utf-8",
+    )
+    (proj / "src").mkdir(exist_ok=True)
+    (proj / "src" / "Slides").mkdir(exist_ok=True)
+    try:
+        _os.chdir(str(proj))
+        import build_slide_data as bsd
+        importlib.reload(bsd)
+        bsd.PROJ = proj
+
+        # default (redact)
+        _sys.argv = ["build_slide_data.py", "--mode", "topic"]
+        out_buf = io.StringIO()
+        with redirect_stdout(out_buf), redirect_stderr(io.StringIO()):
+            try:
+                bsd.main()
+            except SystemExit:
+                pass
+        out = out_buf.getvalue()
+        assert "path:" in out, f"path line missing in stdout: {out!r}"
+        # raw proj path が default で出ない (redact 経由で 相対 / <TMP> / <HOME> placeholder)
+        path_line = next(l for l in out.splitlines() if l.startswith("path:"))
+        assert str(proj) not in path_line, \
+            f"raw proj path leaked in default human stdout: {path_line!r}"
+
+        # --unsafe-keep-abs-path で raw
+        _sys.argv = ["build_slide_data.py", "--mode", "topic", "--unsafe-keep-abs-path"]
+        out_buf2 = io.StringIO()
+        with redirect_stdout(out_buf2), redirect_stderr(io.StringIO()):
+            try:
+                bsd.main()
+            except SystemExit:
+                pass
+        out2 = out_buf2.getvalue()
+        # raw mode では full path component が含まれる (debug 用途)
+        assert "src/Slides/slideData.ts" in out2, \
+            f"unsafe-keep-abs-path should preserve full path, got {out2!r}"
+    finally:
+        _os.chdir(saved_cwd)
+        _sys.argv = saved_argv
+        _shutil_mod.rmtree(proj, ignore_errors=True)
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -3873,6 +3980,9 @@ def main() -> int:
         test_observability_redact_secret_non_string_passthrough,
         test_observability_redact_secret_custom_last_n_and_mask_char,
         test_observability_redact_secret_last_n_zero_or_negative_full_mask,
+        # PR-I (human stdout path leak audit、Codex 00:08 approve): 2 件 (1 feat + 1 fix iter voicevox summary redact)
+        test_build_slide_data_human_stdout_path_redacted_by_default,
+        test_voicevox_narration_summary_path_redacted_by_default,
     ]
     failed = []
     for t in tests:
