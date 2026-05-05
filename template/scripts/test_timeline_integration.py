@@ -2475,6 +2475,15 @@ def test_observability_helper_status_map() -> None:
         "stale_cleanup_fail", "vad_invalid", "no_chunks_succeeded",
         "partial_chunks_disallowed", "concat_fail",
         "write_narration_data_wave_error", "sentinel_write_fail",
+        # compare_telop_split (Codex 21:01 verdict S3-6 KPI comparison)
+        "all_pass", "some_fail",
+        # visual_smoke (Codex 21:01 verdict S3-4 dimension regression)
+        "smoke_ok", "dimension_mismatch", "env_error", "grid_failed",
+        # visual_smoke early return (Codex 21:14 PR4 review P1 #1 で 1 invocation 1 emission contract 化)
+        "usage_error_formats_empty", "usage_error_unknown_format",
+        "usage_error_frames_empty", "usage_error_frames_negative", "usage_error_patch_format",
+        "env_tool_missing", "env_main_video_missing",
+        "env_remotion_cli_missing", "env_video_config_missing",
     }
     missing = must_have - set(STATUS_MAP.keys())
     assert not missing, f"STATUS_MAP missing v0 statuses: {missing}"
@@ -2508,6 +2517,18 @@ def test_observability_safe_artifact_path_redacts() -> None:
                               unsafe_keep_abs_path=True) == f"{proj}/x.json"
     # None passthrough
     assert safe_artifact_path(None, project_root=proj) is None
+    # Codex 21:14 PR4 review P1 #2 fix: /tmp / /var/folders 等 system tmpdir は <TMP> placeholder
+    sp_tmp = safe_artifact_path("/tmp/telop_baseline.ts", project_root=proj)
+    assert sp_tmp.startswith("<TMP>"), f"expected <TMP> placeholder for /tmp/, got {sp_tmp!r}"
+    assert "/tmp/" not in sp_tmp, f"raw /tmp/ leaked: {sp_tmp!r}"
+    # macOS tmpfs (/var/folders) も <TMP>
+    sp_macos = safe_artifact_path("/var/folders/kn/abc/foo.ts", project_root=proj)
+    assert sp_macos.startswith("<TMP>"), f"expected <TMP> for /var/folders, got {sp_macos!r}"
+    # 任意の絶対 path (project / HOME / TMP 外) は <ABS>/basename に隠す
+    sp_abs = safe_artifact_path("/etc/some_secret/foo.ts", project_root=proj)
+    assert sp_abs.startswith("<ABS>"), f"expected <ABS> placeholder, got {sp_abs!r}"
+    assert "/etc/" not in sp_abs and "some_secret" not in sp_abs, \
+        f"raw absolute path structure leaked: {sp_abs!r}"
 
 
 def test_observability_user_content_meta_no_raw() -> None:
@@ -2588,6 +2609,39 @@ def test_observability_build_status_v1_schema() -> None:
     assert p["model"] == "claude-haiku-4-5"
     assert p["max_tokens"] == 2048
     assert p["output"] == "out/foo.json"
+
+
+def test_observability_build_status_duration_ms_and_category_override() -> None:
+    """Codex 21:01 step 3 S3-7: helper hardening — `duration_ms` を common field
+    として明示 + `category_override` で STATUS_MAP の v1_category を上書き可能。
+    """
+    from _observability import build_status
+
+    # duration_ms None で payload に含まれない (default 動作)
+    p_default = build_status(script="x", v0_status="success", exit_code=0)
+    assert "duration_ms" not in p_default, f"duration_ms should be omitted when None: {p_default}"
+    # duration_ms 明示で含まれる
+    p_dur = build_status(script="x", v0_status="success", exit_code=0, duration_ms=1234)
+    assert p_dur["duration_ms"] == 1234
+
+    # category_override で STATUS_MAP の category を上書き
+    # success → ("ok", None) by default
+    p_no_override = build_status(script="x", v0_status="success", exit_code=0)
+    assert p_no_override["category"] is None
+    # category_override="kpi-comparison" で上書き
+    p_override = build_status(
+        script="x", v0_status="success", exit_code=0,
+        category_override="kpi-comparison",
+    )
+    assert p_override["category"] == "kpi-comparison"
+    assert p_override["status"] == "ok"  # v1_status は STATUS_MAP のまま (success → ok)
+    # category_override="dimension-regression" を error 系の v0 status に適用
+    p_err = build_status(
+        script="visual_smoke", v0_status="dimension_mismatch", exit_code=2,
+        category_override="dimension-regression",
+    )
+    assert p_err["status"] == "error"
+    assert p_err["category"] == "dimension-regression"
 
 
 def test_observability_provider_body_stderr_default_redact() -> None:
@@ -2760,6 +2814,7 @@ def main() -> int:
         test_observability_user_content_meta_no_raw,
         test_observability_redact_provider_body_default_strict,
         test_observability_build_status_v1_schema,
+        test_observability_build_status_duration_ms_and_category_override,
         test_observability_provider_body_stderr_default_redact,
         test_observability_emit_json_disabled_no_print,
     ]
