@@ -2,7 +2,7 @@
 
 本 doc は Roku 発言 (前セッション 869aaf03-...jsonl 2026-05-04T06:58 実測) を起点に、Phase 3-V release-ready 後の未着手 scope を整理する v0 draft。
 
-**v0 構造**: 構造 + 範囲 + roadmap 骨子 + リスク framework は Claude 起草で verify 済み。詳細技術選定 (§4) と既知の罠 / 過去事例 / 法規制現状 (§7) は Codex fill-in 反映済 (794e3bc、35 一次情報 [S1]-[S35] citation 付き)。残 [要 Codex 補完] marker は §2 Phase 単位 API 課金見積のみで、各 Phase 着手判断時に再 consult する方針。
+**v0 構造**: 構造 + 範囲 + roadmap 骨子 + リスク framework は Claude 起草で verify 済み。詳細技術選定 (§4) と既知の罠 / 過去事例 / 法規制現状 (§7) は Codex fill-in 反映済 (794e3bc、35 citations [S1]-[S35]、一次情報中心。一部は第三者 (G2 / Renderful 等) または報道として明示)。価格 hardcode は invariant 上禁止、各 Phase 着手判断時に Roku + Codex で再 consult する方針。
 
 ## 0. メタ情報
 
@@ -52,7 +52,7 @@
 | 検証ゲート | python smoke (chapter timeline integration test)、React component test (Chapter render) |
 | 依存技術 | Anthropic API (chapter plan)、VOICEVOX (既)、既存 slide |
 | 想定 effort | M (timeline.py の chapter helper、build_chapter_data.py、Remotion component、test) |
-| API 課金 | Anthropic Haiku 4-5 ~$0.10/章 plan 生成想定 [要 Codex 補完で実コスト見積] |
+| API 課金 | [Roku 判断 + Phase 4 着手判断時に再 consult、価格 hardcode invariant 禁止、§4.1/4.4 一次情報 citation 参照] |
 | Roku 判断領域 | chapter 自動分割 prompt 設計、分量設計 |
 
 ### Phase 5: スライド自動切替 + B-roll 挿入 (visual richness v0)
@@ -63,9 +63,9 @@
 | 前提 | Phase 4 完了、画像生成 API (Gemini or 別) 統合 |
 | 成果物 | `insertImageData.ts` の自動生成版、Phase 5 Studio preview |
 | 検証ゲート | image asset gate (生成失敗時 skip)、visual smoke 拡張 |
-| 依存技術 | Gemini image API (既存 supermovie-image-gen skill 拡張)、Anthropic API (image prompt 生成) |
+| 依存技術 | Gemini image API (既存 supermovie-image-gen skill 拡張)、Anthropic API (image prompt 生成)、動画生成 API (Kling / Runway / Pika / Sora 等、§4.3 候補) — B-roll 挿入対応 |
 | 想定 effort | M-L (画像生成 API 統合、prompt design、品質 gate) |
-| API 課金 | Gemini ~$0.04/image × N images [要 Codex 補完] |
+| API 課金 | [Roku 判断 + Phase 5 着手判断時に再 consult、価格 hardcode invariant 禁止、§4.2/4.3 一次情報 citation 参照] |
 | リスク (memo only、Roku 判断領域) | 法的: 生成画像の著作権 / 商用利用条件、品質: 生成失敗率 |
 
 ### Phase 6: AI アバター解説 (talking head v0)
@@ -73,12 +73,12 @@
 | 項目 | 内容 |
 |---|---|
 | 目的 | スライド + アバター話者で セミナー動画スタイル |
-| 前提 | Phase 5 完了 (スライド構造)、アバター技術選定 |
+| 前提 | Phase 4 完了 (slide + narration sync 成果物、§Phase 4 Chapter component)、アバター技術選定 — Phase 5 は B-roll / 画像 visual richness 拡張で Phase 6 必須ではない |
 | 成果物 | `Avatar` Remotion component、avatar 合成 pipeline (offline batch) |
 | 検証ゲート | アバター still image render test、lip sync 簡易 metric |
-| 依存技術 | [要 Codex 補完]: SadTalker / Wav2Lip (OSS) or HeyGen / D-ID (商用 API) |
+| 依存技術 | SadTalker / Wav2Lip (OSS、self-host GPU) or HeyGen / D-ID / Synthesia / Hedra (商用 API) — §4.1 一次情報 citation 参照、最終選定は Phase 6 着手時 Roku + Codex consult |
 | 想定 effort | L-XL (技術選定 + integration + 品質チューニング) |
-| API 課金 | [要 Codex 補完] 商用 API ~$0.20-0.50/min 想定、OSS 自前 GPU の場合は infra cost |
+| API 課金 | [Roku 判断 + Phase 6 着手判断時に再 consult、価格 hardcode invariant 禁止、§4.1 一次情報 citation 参照、OSS 自前 GPU の場合は infra cost も Roku 判断] |
 | **リスク (memo only、Roku 判断領域)** | 法的: deepfake 規制 / 本人許諾、モラル: 偽情報生成 / なりすまし、品質: uncanny valley、信頼喪失リスク |
 
 ## 3. 統合パス選択肢
@@ -117,7 +117,7 @@
 
 ## 4. 技術選定マトリクス v0
 
-評価凡例: 品質は「公開ベンチあり」は数値優先、「公開ベンチ未確認」は demo / API 仕様ベースの暫定評価。統合難度は API / file format / setup の観点。Codex consult (CODEX_FUTURE_FILLIN_20260505T094327.md) で全セル一次情報照合済 (URL は §9 References)。
+評価凡例: 品質は「公開ベンチあり」は数値優先、「公開ベンチ未確認」は demo / API 仕様ベースの暫定評価。統合難度は API / file format / setup の観点。Codex consult (CODEX_FUTURE_FILLIN 20260505T094327) で全セル citation 付き、一次情報中心、一部は第三者 (G2 / Renderful 等) または報道として明示 (URL は §9 References)。
 
 ### 4.1 AI アバター (Phase 6 候補)
 
