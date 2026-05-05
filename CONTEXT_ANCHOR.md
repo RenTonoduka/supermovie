@@ -12,16 +12,16 @@
 
 ## Verified Snapshot (作成時点で Bash 実測、push/PR 前に再更新)
 
-| 項目 | 値 (Bash 実測 2026-05-05 12:33) |
+| 項目 | 値 (Bash 実測 2026-05-05 12:41) |
 |---|---|
-| HEAD | `7438df5` |
+| HEAD | `4528a6b` |
 | branch | `roku/phase3j-timeline` |
-| main..HEAD | 124 commits |
-| roku/phase3i-transcript-alignment..HEAD | 106 commits |
+| main..HEAD | 125 commits |
+| roku/phase3i-transcript-alignment..HEAD | 107 commits |
 | origin remote | `https://github.com/RenTonoduka/supermovie.git` |
 | origin viewerPermission | READ (Roku gh account `blessing1031r-dotcom` は write 権限なし) |
 | fork remote | 不在 (`git remote get-url fork` で error: No such remote、Step 6 で `gh repo fork` 後に `git remote add fork` 予定) |
-| gh auth status | ✓ Logged in (account: blessing1031r-dotcom、scopes: gist read:org repo workflow) |
+| gh auth status | ✓ Logged in (account: blessing1031r-dotcom、scopes: gist read:org repo workflow、Claude Code 側 12:00 / 12:32 / 12:38 / 12:41 で 4 回 valid 確認。Codex `--ephemeral` sandbox 内では token 不可視 = invalid 表示されるが Claude Code 実行環境に影響なし) |
 | worktree | clean (cleanup commit `e0f5107` で `docs/reviews/**` 38 files + `docs/roadmap/FUTURE_FEATURES_REQUIREMENTS_v0.md` を release scope から外し済み、future doc は別 worktree `../supermovie-future-features-v0` の `roku/future-features-v0` branch `72a6ef4` に保全済) |
 | 6 gate composite | ALL PASS (head 1bc6bab → cleanup `e0f5107` で diff は docs only、composite gate 影響なし、Step 5 で再検証) |
 
@@ -55,13 +55,13 @@ Roku 「OK、推奨から進めて」(11:46 user prompt) で以下 5 項目の C
 
 `origin/main` 側には上記 exclude path が存在しないため、`git rm` で release branch から削除すれば final diff から消える (Codex 命令 §B 注記)。
 
-## Required Gates (push/PR 前に Roku machine で実行必須、Codex 命令 §A)
+## Required Gates (Draft PR 開始は composite gate のみで可、merge 前に Roku machine で visual-smoke / render 実行必須、Codex 12:08 命令 §A + Codex 4th review verdict)
 
 ```bash
-# 1. self-driveable composite gate (Claude 自走 OK)
+# 1. self-driveable composite gate (Draft PR 開始 OK、Claude 自走可)
 bash scripts/check_release_ready.sh                 # ALL PASS 必須
 
-# 2. 実 project e2e (Roku 環境必要、main.mp4 fixture)
+# 2. 実 project e2e (merge 前必須、Roku 環境必要、main.mp4 fixture)
 cd template
 npm run test:visual-smoke                           # 3 format × 2 frame still + dimension regression
 npm run render                                       # 実 render 1 周
