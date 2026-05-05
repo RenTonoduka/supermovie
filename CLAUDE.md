@@ -255,3 +255,26 @@ git pull origin main
 - 全スキルは `project-config.json` の `format` / `resolution` を参照してサイズ調整する
 - AssemblyAI は `supermovie-transcribe` の話者分離時のみ使用
 - 画像生成は `gemini-api-image` スキルを使用。アスペクト比は `format` に連動
+
+## project 同期 (safe_rsync wrapper)
+
+既存 project への template / repo 同期は **`scripts/safe_rsync.sh` wrapper 必須**、`rsync --delete` の直接実行は禁止。
+
+理由 (2026-05-05 16:14 incident):
+- `rsync -av --delete` で proj1 の Roku 前 work artifact (`typo_dict.json` / `transcript_*.json` / `vad_result.json` / `vad_runner.py` / `transcript_audio.wav`) を消した
+- proj1 は git 管理外、Trash 経由ではないため復元不可 = 取り戻せない
+- safe wrapper は 4 段防御: dry-run scan / sentinel `.supermovie-sandbox` / protect list / backup dir
+
+使い方:
+```bash
+# default dry-run (file 変更なし、protect 違反検出時 stop、exit 4)
+bash scripts/safe_rsync.sh --source <SOURCE> --dest <DEST>
+
+# 実 sync (sentinel + protect 全 pass 後のみ実行可、自動 backup 取得)
+bash scripts/safe_rsync.sh --source <SOURCE> --dest <DEST> --apply
+
+# 新 project に sandbox sentinel を作る (--apply とは排他)
+bash scripts/safe_rsync.sh --init-sentinel --dest <PROJECT>
+```
+
+protect list (`scripts/safe_rsync.protect`) は Roku-curated artifact (`typo_dict.json` 等) + skill-generated data (`telopData.ts` 等) + project SSoT (`videoConfig.ts`) + custom telop component を default 保護。詳細は `scripts/safe_rsync.sh` (255 行) + `scripts/safe_rsync.protect` 参照。
