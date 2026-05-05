@@ -7967,6 +7967,167 @@ def test_observability_script_coverage_matrix_docs_code_lint() -> None:
     )
 
 
+def test_observability_trace_context_docs_code_lint() -> None:
+    """`docs/OBSERVABILITY.md §Trace Context Convention env precedence` 表 ↔
+    code constants (TRACE_*_ENV / MAX_TRACE_CONTEXT_VALUE_LEN) の双方向
+    整合性 lint
+    (Codex 07:02 PR-BI verdict BY、PR-BD/BE/BF/BH docs/code 双方向同型を
+    Trace Context env contract に展開)。
+
+    docs §Trace Context Convention は env precedence 表で 3 env var
+    (`SUPERMOVIE_RUN_ID` / `SUPERMOVIE_PARENT_RUN_ID` / `SUPERMOVIE_STEP_ID`)
+    + cap (`MAX_TRACE_CONTEXT_VALUE_LEN = 128`) を定義、code は同 3 const
+    (`TRACE_RUN_ID_ENV` / `TRACE_PARENT_RUN_ID_ENV` / `TRACE_STEP_ID_ENV`)
+    + 同 cap 値を保持して `resolve_run_context()` が env precedence 仕様
+    通り pass-through / auto-generate / cap 検査を実装する。
+
+    docs と code が drift すると:
+      - env 名の typo (例: SUPERMOVE_RUN_ID) が片側だけで起き、orchestrator
+        が pass-through できず caller 側で auto-generate に fallback
+      - cap 値が docs 128 / code 256 等の不一致で「どちらが contract か」
+        不明、payload に长 trace value が漏れる
+      - run_id の auto-generate 仕様が docs に書かれているが code が
+        rename されて静かに無効化
+
+    本 lint は docs §env precedence table から backtick env name + cap 値を
+    抽出 (3 env name、cap 数値)、code constants と双方向 set diff + 値一致
+    を assert。
+
+    PR-BD §Common Fields key / PR-BE §Cost JSON Shape key / PR-BF §Status
+    Naming value / PR-BH §Script Coverage Matrix と同 level の docs/code
+    双方向 audit、本 lint は trace context env contract という別 axis を fix。
+    """
+    import re
+    from pathlib import Path
+
+    from _observability import (
+        MAX_TRACE_CONTEXT_VALUE_LEN,
+        TRACE_PARENT_RUN_ID_ENV,
+        TRACE_RUN_ID_ENV,
+        TRACE_STEP_ID_ENV,
+    )
+
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    obs_md = repo_root / "docs" / "OBSERVABILITY.md"
+    assert obs_md.is_file(), (
+        f"docs/OBSERVABILITY.md must exist at {obs_md}"
+    )
+    md = obs_md.read_text(encoding="utf-8")
+
+    # `### env precedence` heading 直後 ～ 次の cap section までを抽出
+    section_re = re.compile(
+        r"^### env precedence[^\n]*\n.*?\n(?P<table>(?:\|[^\n]+\n)+)",
+        re.MULTILINE | re.DOTALL,
+    )
+    m = section_re.search(md)
+    assert m is not None, (
+        "`### env precedence` の markdown table が docs に見つからない "
+        "(heading rename / 表 形式変更?)"
+    )
+    table = m.group("table")
+
+    # 1 列目 backtick で囲まれた SUPERMOVIE_* env name のみ抽出
+    docs_env_set = set(
+        re.findall(r"^\|\s*`(SUPERMOVIE_\w+)`\s*\|", table, re.MULTILINE)
+    )
+    assert docs_env_set, (
+        "docs Trace Context env precedence table から SUPERMOVIE_* env が "
+        "0 件 抽出 (table format 変更?)"
+    )
+
+    # code constants
+    code_env_set = {
+        TRACE_RUN_ID_ENV,
+        TRACE_PARENT_RUN_ID_ENV,
+        TRACE_STEP_ID_ENV,
+    }
+    assert len(code_env_set) == 3, (
+        f"code TRACE_*_ENV must be exactly 3 distinct constants, got "
+        f"{code_env_set}"
+    )
+
+    # 双方向 set diff
+    missing_in_code = sorted(docs_env_set - code_env_set)
+    extra_in_code = sorted(code_env_set - docs_env_set)
+    assert not missing_in_code, (
+        f"docs §Trace Context env precedence に列挙された env が code "
+        f"TRACE_*_ENV に存在しない: {missing_in_code}\n"
+        f"docs に新 env 追記後 code 未対応 / typo (SUPERMOVE vs SUPERMOVIE)?"
+    )
+    assert not extra_in_code, (
+        f"code TRACE_*_ENV に存在するが docs §env precedence に未掲載: "
+        f"{extra_in_code}\n"
+        f"code に追加された trace env を docs 表に追記する必要、または "
+        f"code 側の typo / 不正値。"
+    )
+    assert docs_env_set == code_env_set, (
+        f"docs env precedence != code TRACE_*_ENV "
+        f"(missing_in_code={missing_in_code}, extra_in_code={extra_in_code})"
+    )
+
+    # cap 値整合性: docs `MAX_TRACE_CONTEXT_VALUE_LEN = 128` 文言と code 値。
+    # Codex 07:08 review P2 fix: 旧実装は md 全体 search で migration 履歴 row
+    # の `MAX_TRACE_CONTEXT_VALUE_LEN = 128` 文字列に match していた。canonical
+    # な Trace Context section cap 行が消えても履歴文字列で silent pass する
+    # drift。抽出範囲を `## Trace Context Convention` heading から次 `## ` 直前
+    # までに限定して、canonical cap 行が消失したら fail-loud に。
+    trace_section_re = re.compile(
+        r"^## Trace Context Convention[^\n]*\n(?P<body>.*?)(?=^## )",
+        re.MULTILINE | re.DOTALL,
+    )
+    trace_m = trace_section_re.search(md)
+    assert trace_m is not None, (
+        "`## Trace Context Convention` section heading が docs に見つからない"
+    )
+    trace_body = trace_m.group("body")
+    cap_match = re.search(
+        r"`MAX_TRACE_CONTEXT_VALUE_LEN\s*=\s*(\d+)`", trace_body
+    )
+    assert cap_match is not None, (
+        "docs §Trace Context Convention 内に "
+        "`MAX_TRACE_CONTEXT_VALUE_LEN = N` の canonical cap 行が見つからない "
+        "(cap 仕様の docs 変更 / 行削除?)"
+    )
+    docs_cap = int(cap_match.group(1))
+    assert docs_cap == MAX_TRACE_CONTEXT_VALUE_LEN, (
+        f"docs cap = {docs_cap} but code "
+        f"MAX_TRACE_CONTEXT_VALUE_LEN = {MAX_TRACE_CONTEXT_VALUE_LEN}\n"
+        f"片側だけ更新された。docs と code を同期する必要。"
+    )
+
+    # 規約整合性: run_id だけ auto-generate される旨が docs に明記、
+    # parent/step は null fallback (auto-generate しない) が docs に明記
+    # (table cell の precedence 列に「auto-generate」 / 「auto-generate しない」
+    # が含まれるかをスポット check で固定)
+    run_id_row = next(
+        (line for line in table.splitlines() if "SUPERMOVIE_RUN_ID" in line),
+        None,
+    )
+    assert run_id_row is not None
+    assert "auto-generate" in run_id_row and "uuid" in run_id_row.lower(), (
+        f"docs §env precedence で SUPERMOVIE_RUN_ID 行に auto-generate / "
+        f"uuid spec が残っているはず: {run_id_row!r}"
+    )
+    for label, env in (("PARENT", TRACE_PARENT_RUN_ID_ENV),
+                       ("STEP", TRACE_STEP_ID_ENV)):
+        row = next(
+            (line for line in table.splitlines() if env in line), None,
+        )
+        assert row is not None, f"docs から {env} の行が消えた"
+        # Codex 07:08 review P2 fix: 旧 OR 判定は片側だけ消えても他方残存で
+        # silent pass、auto-generate 禁止文言だけ消える drift を見逃した。
+        # AND で両方の spec word 残存を必須化。
+        assert "auto-generate しない" in row, (
+            f"docs §env precedence で {env} 行から 'auto-generate しない' "
+            f"spec が消えた (auto-generate 禁止仕様が runtime と drift): "
+            f"{row!r}"
+        )
+        assert "null" in row, (
+            f"docs §env precedence で {env} 行から 'null' fallback spec が "
+            f"消えた (未設定時 None 返却仕様が runtime と drift): {row!r}"
+        )
+
+
 def test_observability_docs_migration_steps_numbering() -> None:
     """`docs/OBSERVABILITY.md §Migration steps` の step 番号 contract lint
     (Codex 05:11 PR-AV verdict BC、observability migration 履歴 docs drift 防止)。
@@ -9130,6 +9291,7 @@ def main() -> int:
         test_observability_status_naming_docs_status_map_value_lint,
         test_observability_build_cost_payload_currency_tokens_value_contract,
         test_observability_script_coverage_matrix_docs_code_lint,
+        test_observability_trace_context_docs_code_lint,
         test_compare_telop_split_error_message_redacted,
         test_compare_telop_split_exit_code_propagates,
         test_visual_smoke_out_dir_mkdir_error_emits_tail,
