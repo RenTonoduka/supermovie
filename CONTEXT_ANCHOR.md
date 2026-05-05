@@ -14,16 +14,16 @@
 
 | 項目 | 値 (Bash 実測 2026-05-05 20:27、PR #1 merge into fork/main + obs PR fork merge 解消) |
 |---|---|
-| HEAD (source commit) | `8267628` (PR #2 last source commit、anchor 自身の document commit はこの後ろに merge commit + 1 件積まれる、§Source commit vs Document commit 規約 参照) |
+| HEAD (source commit) | `184f616` (merge commit、PR #2 obs source `8267628` + fork/main `77c133a` (PR #1 squash) の non-fast-forward merge、§Source commit vs Document commit 規約 参照) |
 | branch | `roku/observability-doc` (Tech 改善 Medium #3、Codex 3 review iters: 20:08 / 20:14 / 20:23 全 fix 適用済、`roku/phase3j-timeline` ベース、PR #1 (b1 fixture normalize) を fork/main 経由で merge 取込) |
-| main..HEAD | merge 後 update 予定 |
-| roku/phase3i-transcript-alignment..HEAD | merge 後 update 予定 |
+| main..HEAD | 141 commits |
+| roku/phase3i-transcript-alignment..HEAD | 123 commits |
 | origin remote | `https://github.com/RenTonoduka/supermovie.git` (READ only) |
 | origin viewerPermission | READ (Roku gh account `blessing1031r-dotcom` は write 権限なし) |
 | fork remote | `https://github.com/blessing1031r-dotcom/supermovie.git` (Step 6 で `gh repo fork` + `git remote add fork` 完了、PR #1 (fixture-normalize) merged、PR #2 (obs-doc) open) |
 | gh auth status | ✓ Logged in (account: blessing1031r-dotcom、scopes: gist read:org repo workflow、Claude Code 側 12:00 / 12:32 / 12:38 / 12:41 で 4 回 valid 確認。Codex `--ephemeral` sandbox 内では token 不可視 = invalid 表示されるが Claude Code 実行環境に影響なし) |
 | worktree | clean (cleanup commit `e0f5107` で `docs/reviews/**` 38 files + `docs/roadmap/FUTURE_FEATURES_REQUIREMENTS_v0.md` を release scope から外し済み、future doc は別 worktree `../supermovie-future-features-v0` の `roku/future-features-v0` branch `72a6ef4` に保全済) |
-| 7 gate composite | ALL PASS at 8267628 (merge 後 anchor refresh で再走行予定) |
+| 7 gate composite | ALL PASS at 184f616 (env / worktree clean / regen drift 1 / 43/43 python smoke / lint exit 0 / React 22/22 / **gate 7 anchor drift = 1 intrinsic OK**、Bash 実測 20:28 再走行予定) |
 | b1 fixture e2e (`npm run test:visual-smoke` + `npm run render`) | proj1 で全 PASS (Bash 実測 2026-05-05 18:42-18:55、HEVC HDR DoVi 4K → H.264 SDR 1080x1920 60fps + 2516 frames render、`docs/PHASE3_RELEASE_NOTE.md` `b1 fixture normalize evidence trail` 参照) — PR #1 merged into fork/main |
 
 ## Roku Authorized Decisions (2026-05-05 user prompt 確定)
