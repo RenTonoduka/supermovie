@@ -1,21 +1,22 @@
 # SuperMovie Phase 3 Release Note (2026-05-04 → 2026-05-05)
 
-`roku/phase3j-timeline` HEAD: `467ceec` (Codex CODEX_REVIEW_PHASE3V_FINAL_20260505T064250
-で「P0/P1/P2 なし、Phase 3-V production 品質で止めてよい」 verdict、後続は doc 整合 +
-post-freeze backlog artifact のみで挙動変更なし)
+`roku/phase3j-timeline` HEAD: `7eeeb92` (Codex CODEX_REVIEW_PHASE3V_FINAL_20260505T064250
+で「P0/P1/P2 なし、Phase 3-V production 品質で止めてよい」 verdict、後続は post-freeze
+backlog P1-P5 + Codex P5 review 4 fix + future v0 doc + drift fix まで反映、Codex
+P5 re-review で P0/P1 NONE verdict (CODEX_P5_REREVIEW_20260505T101835.md))
 
-Phase 3-A 〜 Phase 3-V の自走実装結果。本 note は Roku 不在モード中に Claude+Codex
-協働で 58 commit (`roku/phase3i-transcript-alignment..HEAD`) を積んだ成果物の release
-assertion を固定する目的。
+Phase 3-A 〜 Phase 3-V の自走実装結果 + 後続 post-freeze backlog 第 1 弾。本 note は
+Roku 不在モード中に Claude+Codex 協働で 74 commit (`roku/phase3i-transcript-alignment..HEAD`、
+main..HEAD は 92 commit) を積んだ成果物の release assertion を固定する目的。
 
-## Release-readiness statement (2026-05-04 時点、技術 readiness のみ)
+## Release-readiness statement (2026-05-05 時点、技術 readiness のみ)
 
 | 項目 | 状態 |
 |---|---|
-| code 側 P0/P1/P2 (Codex 22+ review 通過) | ✅ ゼロ |
-| pure python integration smoke (`test:timeline`) | ✅ 20/20 pass |
-| TypeScript lint / tsc (`npm run lint`) | ✅ exit 0 (errors 0、warnings 0) |
-| React component test (`npm run test:react`) | ✅ 18/18 pass (vitest + jsdom + RTL、4 + 6 + 5 + 3) |
+| code 側 P0/P1/P2 (Codex 22+ + post-freeze re-review 通過) | ✅ ゼロ |
+| pure python integration smoke (`test:timeline`) | ✅ 27/27 pass (Phase 3 + post-freeze edge case 3 + voicevox sentinel 4) |
+| TypeScript lint / tsc (`npm run lint`) | ✅ exit 0 (errors 0、warnings 0、`no-explicit-any` error 化済) |
+| React component test (`npm run test:react`) | ✅ 22/22 pass (vitest + jsdom + RTL、4 + 10 + 5 + 3) |
 | docs vs git log drift (`regen_phase3_progress.sh --verify`) | ✅ exit 0 (drift 1 = self-reference 許容内) |
 | worktree clean | ✅ untracked なし |
 | 実 project visual-smoke / render e2e | [未検証] (Roku 判断領域、main.mp4 fixture 必要) |
@@ -23,7 +24,7 @@ assertion を固定する目的。
 Roku 判断領域 (release blocker 候補):
 - ★ PR / merge 戦略: phase3f→g→h→i→j は ancestry 連結済み、技術的に階層 merge
   不要。Codex 推奨は `roku/phase3j-timeline` を 1 PR / squash merge。`main..HEAD`
-  は 76 commits、PR diff は phase3i..HEAD の 58 commits より大きく見える点に注意。
+  は 92 commits、PR diff は phase3i..HEAD の 74 commits より大きく見える点に注意。
 - 実 project (main.mp4 + node_modules + remotion installed) で
   `npm run test:visual-smoke` と `npm run render` を 1 周通すことが推奨。
 - 5/13 リリース予定なら本 branch を Roku の最終 e2e 後に main へ。
@@ -83,14 +84,33 @@ Roku 判断領域 (release blocker 候補):
   watcher 数半減) + chunk-side defensive 3 件 (一部/全/initial fallback)
 - 計 React test 18/18 pass、`as any` escape ゼロ、watcher 二重登録解消
 
+### 7. Post-freeze backlog 第 1 弾 (Phase 3-V FINAL verdict 後の Codex consult 主導)
+
+Codex post-freeze priority list (`docs/reviews/CODEX_POST_FREEZE_PRIORITY_20260505T083650.md`)
+の P1-P5 を 4 step loop (consult → impl → review → fix → re-review) で全消化:
+
+- **P1** (467ceec): priority artifact commit で worktree gate 復旧
+- **P2** (f471a41): RELEASE_NOTE HEAD/commit count 整合 + PROGRESS auto-regen
+- **P3** (b9507e6): eslint `no-explicit-any` を warn → error 固定 (Phase 3-R any-free contract 機械 gate 化)
+- **P4** (996649f): timeline.py edge case test +3 件 (boundary / single cut / gap removal multi、20 → 23)
+- **P5** (7812e33 + 0bfb678 + ffe5709): voicevox sentinel signal file (publish 完了 hot-reload 厳密化)
+  - design (`docs/reviews/CODEX_P5_VOICEVOX_SENTINEL_DESIGN_20260505T095934.md`):
+    `public/narration.ready.json` 最小 JSON、cleanup → chunks → narrationData.ts → narration.wav → sentinel
+  - Codex review fix: out_path rollback (custom --output orphan 修正)、queueMicrotask burst coalescing、mock metadata 対応、sentinel write fail rollback test
+  - Codex P5 re-review (`CODEX_P5_REREVIEW_20260505T101835.md`): P0/P1 NONE verdict (loop closure)
+
+将来 feature 要件定義 v0 (`docs/roadmap/FUTURE_FEATURES_REQUIREMENTS_v0.md`、commit eb55209 + 794e3bc):
+動画教材 / AI アバター解説セミナー / YouTube / ショート編集 の §1-9 構造、§4/§7 は Codex
+fill-in 35 一次情報 citation 付き (`docs/reviews/CODEX_FUTURE_FILLIN_20260505T094327.md`)。
+
 ## test gate コマンド
 
 ```bash
 cd <PROJECT>  # template から copy された実 project
 npm install                              # 初回のみ
-npm run test:timeline                    # pure python 20 test (engine 不要)
-npm run test:react                       # React 18 test (vitest + jsdom + RTL)
-npm run lint                             # eslint 0 warning + tsc 0 error
+npm run test:timeline                    # pure python 27 test (engine 不要、Phase 3 + post-freeze edge case + voicevox sentinel 含む)
+npm run test:react                       # React 22 test (vitest + jsdom + RTL、4 + 10 + 5 + 3)
+npm run lint                             # eslint 0 warning + tsc 0 error (`no-explicit-any` error 化済)
 npm run test                             # lint + test:timeline + test:react を一気に
 npm run visual-smoke                     # 実 main.mp4 + node_modules で 3 format
                                          # × 2 frame still + dimension regression 検査
@@ -98,11 +118,12 @@ bash scripts/check_release_ready.sh      # 6 gate composite (上記 5 + 環境/w
 bash scripts/regen_phase3_progress.sh --verify  # docs drift 検査 (CI guard)
 ```
 
-## Codex review 履歴 (14 件)
+## Codex review 履歴 (Phase 3-V FINAL: 14 件 + post-freeze: 7 件)
 
-`docs/reviews/CODEX_*.md` に全 artifact 保存。各 review の対象 commit + verdict +
-fix commit の対応は `docs/PHASE3_PROGRESS.md` の Codex review 履歴 table 参照。
-最新 review (`CODEX_FINAL_VERIFY_20260504T231638`) で release-ready 判定。
+`docs/reviews/CODEX_*.md` に全 artifact 保存 (Phase 3 系 + post-freeze 系で計 31 件以上)。
+各 review の対象 commit + verdict + fix commit の対応は `docs/PHASE3_PROGRESS.md` の
+Codex review 履歴 table 参照。release-ready 判定 (`CODEX_FINAL_VERIFY_20260504T231638`) +
+post-freeze loop closure (`CODEX_P5_REREVIEW_20260505T101835.md`) で 2 段階 close。
 
 ## 既知の限界 / 後続 phase 候補
 
