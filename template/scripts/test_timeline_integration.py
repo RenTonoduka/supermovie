@@ -2622,6 +2622,12 @@ def test_observability_helper_status_map() -> None:
         # slide-plan error variants (PR-F で cost_guard_aborted 追加)
         "cost_guard_arg_invalid", "cost_guard_aborted", "inputs_missing", "rate_limited",
         "api_http_error", "llm_json_invalid",
+        # PR-G error path tail audit additions
+        "typo_dict_invalid", "telop_ts_missing", "telop_ts_invalid", "kpi_calc_error",
+        "write_config_parse_error", "write_config_write_error",
+        "out_dir_mkdir_error", "video_config_read_error",
+        "video_config_write_error", "video_config_restore_error",
+        "summary_write_error",
         # voicevox error variants (voicevox_narration.py 全 emit_json("error_status",...) 経路)
         "transcript_missing", "transcript_invalid", "no_chunks", "invalid_fps",
         "stale_cleanup_fail", "vad_invalid", "no_chunks_succeeded",
@@ -3427,6 +3433,291 @@ def test_generate_slide_plan_cost_abort_cli_overrides_env() -> None:
         _shutil.rmtree(proj, ignore_errors=True)
 
 
+def test_compare_telop_split_transcript_missing_emits_tail() -> None:
+    """compare_telop_split で transcript_fixed.json 欠落時に v1 tail 出力 + exit 3。
+
+    PR-G error path tail audit: emit_obs 定義前の file read failure でも
+    --json-log で tail を返すこと。
+    """
+    import os as _os
+    import io
+    import sys as _sys
+    import importlib
+    from contextlib import redirect_stdout, redirect_stderr
+
+    saved_argv = list(_sys.argv)
+    saved_cwd = _os.getcwd()
+
+    proj = Path(tempfile.mkdtemp(prefix="cts_no_transcript_"))
+    # transcript_fixed.json を意図的に置かない
+    try:
+        _os.chdir(str(proj))
+        import compare_telop_split as cts
+        importlib.reload(cts)
+        cts.PROJ = proj
+
+        _sys.argv = ["compare_telop_split.py", "/dev/null", "/dev/null", "--json-log"]
+        out_buf = io.StringIO()
+        err_buf = io.StringIO()
+        with redirect_stdout(out_buf), redirect_stderr(err_buf):
+            rc = cts.main()
+        assert rc == 3, f"transcript missing should exit 3, got {rc}"
+        lines = [l for l in out_buf.getvalue().splitlines() if l.strip()]
+        v1_tail = json.loads(lines[-1])
+        assert v1_tail["status"] == "error"
+        assert v1_tail["category"] == "transcript_missing"
+        assert v1_tail["exit_code"] == 3
+    finally:
+        _os.chdir(saved_cwd)
+        _sys.argv = saved_argv
+        import shutil as _shutil
+        _shutil.rmtree(proj, ignore_errors=True)
+
+
+def test_compare_telop_split_typo_dict_invalid_emits_tail() -> None:
+    """compare_telop_split で typo_dict.json malformed JSON 時に v1 tail + exit 3。"""
+    import os as _os
+    import io
+    import sys as _sys
+    import importlib
+    from contextlib import redirect_stdout, redirect_stderr
+
+    saved_argv = list(_sys.argv)
+    saved_cwd = _os.getcwd()
+
+    proj = Path(tempfile.mkdtemp(prefix="cts_bad_typo_"))
+    (proj / "transcript_fixed.json").write_text(
+        json.dumps({"duration_ms": 1000, "words": [], "segments": []}),
+        encoding="utf-8",
+    )
+    # typo_dict.json を invalid JSON で書く
+    (proj / "typo_dict.json").write_text("{ this is not json }", encoding="utf-8")
+    try:
+        _os.chdir(str(proj))
+        import compare_telop_split as cts
+        importlib.reload(cts)
+        cts.PROJ = proj
+
+        _sys.argv = ["compare_telop_split.py", "/dev/null", "/dev/null", "--json-log"]
+        out_buf = io.StringIO()
+        err_buf = io.StringIO()
+        with redirect_stdout(out_buf), redirect_stderr(err_buf):
+            rc = cts.main()
+        assert rc == 3, f"typo_dict invalid should exit 3, got {rc}"
+        lines = [l for l in out_buf.getvalue().splitlines() if l.strip()]
+        v1_tail = json.loads(lines[-1])
+        assert v1_tail["status"] == "error"
+        assert v1_tail["category"] == "typo_dict_invalid"
+    finally:
+        _os.chdir(saved_cwd)
+        _sys.argv = saved_argv
+        import shutil as _shutil
+        _shutil.rmtree(proj, ignore_errors=True)
+
+
+def test_preflight_video_write_config_parse_error_emits_tail() -> None:
+    """preflight_video で既存 write-config が malformed JSON の時に tail + exit 3。"""
+    import os as _os
+    import io
+    import sys as _sys
+    import subprocess
+    import shutil as _shutil_mod
+    from contextlib import redirect_stdout, redirect_stderr
+
+    if _shutil_mod.which("ffprobe") is None:
+        # ffprobe 不在環境では実行不可、skip 扱い (test pass、condition unmet)
+        return
+
+    saved_argv = list(_sys.argv)
+    saved_cwd = _os.getcwd()
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="preflight_bad_cfg_"))
+    bad_cfg = tmp_dir / "project-config.json"
+    bad_cfg.write_text("{ invalid json", encoding="utf-8")
+    # 簡易 mp4: ffmpeg で生成 (ない環境では skip)
+    src_mp4 = tmp_dir / "in.mp4"
+    if _shutil_mod.which("ffmpeg") is None:
+        _shutil_mod.rmtree(tmp_dir, ignore_errors=True)
+        return
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+             "color=c=black:s=320x240:d=0.1", "-pix_fmt", "yuv420p", str(src_mp4)],
+            check=True, capture_output=True, timeout=30,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        _shutil_mod.rmtree(tmp_dir, ignore_errors=True)
+        return
+
+    try:
+        result = subprocess.run(
+            [_sys.executable, str(Path(__file__).parent / "preflight_video.py"),
+             str(src_mp4),
+             "--write-config", str(bad_cfg),
+             "--json-log"],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 3, \
+            f"bad write-config should exit 3, got {result.returncode}\nstderr: {result.stderr}"
+        lines = [l for l in result.stdout.splitlines() if l.strip()]
+        v1_tail = json.loads(lines[-1])
+        assert v1_tail["status"] == "error"
+        assert v1_tail["category"] == "write-config-parse-error"
+    finally:
+        _sys.argv = saved_argv
+        _os.chdir(saved_cwd)
+        _shutil_mod.rmtree(tmp_dir, ignore_errors=True)
+
+
+def test_observability_redact_error_message_strips_abs_path() -> None:
+    """PR-G review P1 #2: redact_error_message が error 文字列内の abs path を placeholder 化する。
+
+    `error=str(e)` を tail JSON に出す経路で abs_path / `<HOME>` 配下 / `<TMP>` を leak しないこと。
+    """
+    import os as _os
+    from _observability import redact_error_message
+
+    # Ensure /tmp/ paths get redacted
+    msg = "[Errno 2] No such file or directory: '/tmp/test/foo.json'"
+    redacted = redact_error_message(msg)
+    assert "/tmp/test/foo.json" not in redacted, f"raw /tmp path leaked: {redacted!r}"
+    assert "<TMP>" in redacted or "<ABS>" in redacted, \
+        f"placeholder missing: {redacted!r}"
+
+    # Ensure HOME-prefixed abs path becomes <HOME>
+    home = str(Path.home())
+    msg2 = f"file not found: {home}/secret/foo.json"
+    redacted2 = redact_error_message(msg2)
+    assert home not in redacted2, f"raw HOME leaked: {redacted2!r}"
+    assert "<HOME>" in redacted2, f"<HOME> placeholder missing: {redacted2!r}"
+
+    # Ensure non-path content untouched
+    msg3 = "ValueError: invalid input 'foo'"
+    assert redact_error_message(msg3) == msg3
+
+    # PR-G fix iter 2 (Codex 23:33 P2 #1): URL 破壊しないこと
+    url_msg = "fetch failed: https://example.com/api/v1/foo"
+    redacted_url = redact_error_message(url_msg)
+    assert "https://example.com/api/v1/foo" in redacted_url, \
+        f"URL should be preserved, got {redacted_url!r}"
+
+    # file:// scheme もOK
+    file_url = "could not open file://localhost/tmp/x.json"
+    redacted_file_url = redact_error_message(file_url)
+    assert "file://localhost" in redacted_file_url, \
+        f"file:// URL should be preserved (scheme intact), got {redacted_file_url!r}"
+
+
+def test_compare_telop_split_error_message_redacted() -> None:
+    """compare_telop_split で error=str(e) → tail に raw abs path が漏れないこと。
+
+    PR-G review P1 #2 fix の actual emission を検証。
+    """
+    import os as _os
+    import io
+    import sys as _sys
+    import importlib
+    from contextlib import redirect_stdout, redirect_stderr
+
+    saved_argv = list(_sys.argv)
+    saved_cwd = _os.getcwd()
+
+    proj = Path(tempfile.mkdtemp(prefix="cts_redact_"))
+    try:
+        _os.chdir(str(proj))
+        import compare_telop_split as cts
+        importlib.reload(cts)
+        cts.PROJ = proj
+
+        _sys.argv = ["compare_telop_split.py", "/dev/null", "/dev/null", "--json-log"]
+        out_buf = io.StringIO()
+        err_buf = io.StringIO()
+        with redirect_stdout(out_buf), redirect_stderr(err_buf):
+            rc = cts.main()
+        assert rc == 3
+        lines = [l for l in out_buf.getvalue().splitlines() if l.strip()]
+        v1_tail = json.loads(lines[-1])
+        # error field は redact 済 (raw proj path が出ない)
+        err_field = v1_tail.get("error", "")
+        assert str(proj) not in err_field, \
+            f"raw proj path leaked in error field: {err_field!r}"
+    finally:
+        _os.chdir(saved_cwd)
+        _sys.argv = saved_argv
+        import shutil as _shutil
+        _shutil.rmtree(proj, ignore_errors=True)
+
+
+def test_compare_telop_split_exit_code_propagates() -> None:
+    """PR-G review P1 #1: __main__ entry が sys.exit(main()) で early-error exit code を propagate。
+
+    transcript missing 時に subprocess 終了コード 3 が返ることを検証 (in-process では shell exit を取れないため subprocess 経由)。
+    """
+    import os as _os
+    import sys as _sys
+    import subprocess
+
+    proj = Path(tempfile.mkdtemp(prefix="cts_exit_"))
+    try:
+        result = subprocess.run(
+            [_sys.executable, str(Path(__file__).parent / "compare_telop_split.py"),
+             "/dev/null", "/dev/null", "--json-log"],
+            capture_output=True, text=True, timeout=15,
+            cwd=str(proj),
+        )
+        assert result.returncode == 3, \
+            f"early-error exit code should be 3, got {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        # tail も exit_code=3 であること (P1 #1 の対称検証)
+        lines = [l for l in result.stdout.splitlines() if l.strip()]
+        v1_tail = json.loads(lines[-1])
+        assert v1_tail["exit_code"] == 3
+    finally:
+        import shutil as _shutil
+        _shutil.rmtree(proj, ignore_errors=True)
+
+
+def test_visual_smoke_out_dir_mkdir_error_emits_tail() -> None:
+    """visual_smoke で out_dir が file (not dir) の時に mkdir failure + tail + exit 3。"""
+    import os as _os
+    import io
+    import sys as _sys
+    import importlib
+    from contextlib import redirect_stdout, redirect_stderr
+
+    saved_argv = list(_sys.argv)
+    saved_cwd = _os.getcwd()
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="vs_bad_outdir_"))
+    # file を out_dir として渡す (mkdir は FileExistsError)
+    bad_out = tmp_dir / "not_a_dir"
+    bad_out.write_text("blocking file", encoding="utf-8")
+    try:
+        import visual_smoke as vs
+        importlib.reload(vs)
+
+        _sys.argv = [
+            "visual_smoke.py",
+            "--out-dir", str(bad_out),
+            "--formats", "youtube",
+            "--frames", "30",
+            "--json-log",
+        ]
+        out_buf = io.StringIO()
+        err_buf = io.StringIO()
+        with redirect_stdout(out_buf), redirect_stderr(err_buf):
+            rc = vs.cli()
+        assert rc == 3, f"out_dir mkdir error should exit 3, got {rc}\nstderr: {err_buf.getvalue()}"
+        lines = [l for l in out_buf.getvalue().splitlines() if l.strip()]
+        v1_tail = json.loads(lines[-1])
+        assert v1_tail["status"] == "error"
+        assert v1_tail["category"] == "out-dir-mkdir-error"
+    finally:
+        _sys.argv = saved_argv
+        _os.chdir(saved_cwd)
+        import shutil as _shutil
+        _shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -3494,6 +3785,14 @@ def main() -> int:
         test_generate_slide_plan_cost_abort_blocks_api_when_estimate_exceeds,
         test_generate_slide_plan_cost_abort_skipped_when_rate_unset,
         test_generate_slide_plan_cost_abort_cli_overrides_env,
+        # PR-G (error path tail emit audit): 7 件 (4 早期 path emit + 3 fix iter: redact unit/integ + exit code propagation)
+        test_compare_telop_split_transcript_missing_emits_tail,
+        test_compare_telop_split_typo_dict_invalid_emits_tail,
+        test_preflight_video_write_config_parse_error_emits_tail,
+        test_observability_redact_error_message_strips_abs_path,
+        test_compare_telop_split_error_message_redacted,
+        test_compare_telop_split_exit_code_propagates,
+        test_visual_smoke_out_dir_mkdir_error_emits_tail,
     ]
     failed = []
     for t in tests:

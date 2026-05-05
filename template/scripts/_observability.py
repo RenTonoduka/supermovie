@@ -12,6 +12,7 @@ Design:
 import hashlib
 import json
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -58,6 +59,11 @@ STATUS_MAP = {
     # compare_telop_split (Codex 21:01 verdict S3-6 KPI comparison、category_override="kpi-comparison")
     "all_pass": ("ok", "kpi-comparison"),
     "some_fail": ("error", "kpi-comparison"),
+    # compare_telop_split early-error paths (PR-G error path tail audit)
+    "typo_dict_invalid": ("error", "typo_dict_invalid"),
+    "telop_ts_missing": ("error", "telop_ts_missing"),
+    "telop_ts_invalid": ("error", "telop_ts_invalid"),
+    "kpi_calc_error": ("error", "kpi_calc_error"),
     # visual_smoke (Codex 21:01 verdict S3-4、category_override="dimension-regression")
     "smoke_ok": ("ok", "dimension-regression"),
     "dimension_mismatch": ("error", "dimension-regression"),
@@ -72,6 +78,12 @@ STATUS_MAP = {
     "env_tool_missing": ("error", "env-failure"),
     "env_main_video_missing": ("error", "env-failure"),
     "env_remotion_cli_missing": ("error", "env-failure"),
+    # visual_smoke early IO failure paths (PR-G error path tail audit)
+    "out_dir_mkdir_error": ("error", "out-dir-mkdir-error"),
+    "video_config_read_error": ("error", "video-config-read-error"),
+    "video_config_write_error": ("error", "env-failure"),
+    "video_config_restore_error": ("error", "env-failure"),
+    "summary_write_error": ("error", "summary-write-error"),
     "env_video_config_missing": ("error", "env-failure"),
     "usage_error_frames_invalid": ("error", "usage-error"),
     # preflight_video (PR-B、Codex 21:01 step 3 S3-3、category_override="preflight-source-meta")
@@ -81,6 +93,9 @@ STATUS_MAP = {
     "ffprobe_failed": ("error", "ffprobe-failed"),
     "risks_not_allowed": ("error", "risks-not-allowed"),
     "format_inference_failed": ("error", "format-inference-failed"),
+    # preflight_video write-config error paths (PR-G error path tail audit)
+    "write_config_parse_error": ("error", "write-config-parse-error"),
+    "write_config_write_error": ("error", "write-config-write-error"),
     # build_slide_data / build_telop_data (PR-C、Codex 21:01 step 3 S3-5 user_content redaction)
     "build_slide_ok": ("ok", "slide-build"),
     "build_telop_ok": ("ok", "telop-build"),
@@ -122,6 +137,33 @@ def _lexical_redact(s, home):
     if s.startswith("/"):
         return f"<ABS>/{Path(s).name}"
     return s
+
+
+# `/...` 風の path token を抽出。直前が word 文字 (URL の `https:` / `file:` 等の scheme) や
+# `:` の場合はマッチしない (URL 破壊回避、Codex 23:33 P2 #1)。
+_ABS_PATH_RE = re.compile(r"(?<![A-Za-z0-9_:/])(/[A-Za-z0-9._/\-]+)")
+
+
+def redact_error_message(msg):
+    """Error message 文字列内の絶対 path token を `_lexical_redact` で安全化する。
+
+    PR-G review P1 #2 (Codex 23:25): error=str(e) で abs_path が tail JSON に raw 漏れする
+    contract 違反を防ぐため、regex で `/...` 風の token を抽出し `<HOME>` / `<TMP>` / `<ABS>`
+    placeholder に置換する。引用符 (`'/foo'` / `"/foo"`) や直前文字 (`:`、`=`) があっても
+    動作するよう、char-class で前後 boundary を判定する。
+
+    URL 破壊回避: `https://...` の `://` 配下は scheme の `:` が直前にあるため非 match。
+    純粋な絶対 path のみ redact 対象。
+    """
+    if not isinstance(msg, str):
+        return msg
+    home = str(Path.home())
+
+    def _sub(m):
+        path = m.group(1)
+        return _lexical_redact(path, home)
+
+    return _ABS_PATH_RE.sub(_sub, msg)
 
 
 def safe_artifact_path(path, *, project_root=None, repo_root=None, unsafe_keep_abs_path=False):

@@ -303,6 +303,7 @@ def main():
     from _observability import (
         build_status,
         emit_json as _obs_emit_json,
+        redact_error_message,
         resolve_run_context,
         safe_artifact_path,
     )
@@ -373,7 +374,7 @@ def main():
         probe = run_ffprobe(args.input_video)
     except FFprobeError as e:
         print(f"ERROR: {e}", file=sys.stderr)
-        sys.exit(_emit("ffprobe_failed", 3, error=str(e)))
+        sys.exit(_emit("ffprobe_failed", 3, error=redact_error_message(str(e))))
     streams = probe.get("streams", []) or []
     video_streams = [s for s in streams if s.get("codec_type") == "video"]
     audio_streams = [s for s in streams if s.get("codec_type") == "audio"]
@@ -403,8 +404,14 @@ def main():
 
     if args.write_config:
         cfg_path = Path(args.write_config)
+        # PR-G: 既存 config の parse / write 失敗を tail emit する。
         if cfg_path.exists():
-            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+            try:
+                cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"ERROR: existing write-config parse failed: {e}", file=sys.stderr)
+                sys.exit(_emit("write_config_parse_error", 3,
+                               error=redact_error_message(str(e))))
         else:
             cfg = {}
         cfg.setdefault("source", {})
@@ -415,7 +422,12 @@ def main():
         }
         if chosen_format:
             cfg["format"] = chosen_format
-        cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError as e:
+            print(f"ERROR: write-config write failed: {e}", file=sys.stderr)
+            sys.exit(_emit("write_config_write_error", 3,
+                           error=redact_error_message(str(e))))
         print(f"\nwrote: {cfg_path}", file=sys.stderr)
 
     if unhandled:
