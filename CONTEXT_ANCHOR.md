@@ -27,11 +27,11 @@
 
 ## Roku Authorized Decisions (2026-05-05 user prompt 確定)
 
-Roku 「OK、推奨から進めて」(11:46 user prompt) で以下 5 項目の Codex 推奨を一括採用:
+Roku 「OK、推奨から進めて」(11:46 user prompt) で以下 5 項目の Codex 推奨を一括採用。**ただし項目 1 (push 戦略) は Roku 18:06 訂正で完了条件 = local 再現性 と確定したため、upstream PR 部分は optional_later に再分類されている (§External Actions の Mission frame 注記参照)。本 table は 11:46 時点の history として保持**:
 
-| # | 項目 | Codex 推奨 (採用済み) |
+| # | 項目 | Codex 推奨 (採用済み、※ 18:06 後に解釈変更) |
 |---|---|---|
-| 1 | push 戦略 | **fork → blessing1031r-dotcom → upstream PR** (Option A) |
+| 1 | push 戦略 | **fork → blessing1031r-dotcom → (fork-internal merge or upstream PR)** ※ upstream PR 部分は 18:06 後 optional_later、現 PR は fork-internal で完結 |
 | 2 | squash 範囲 | raw `docs/reviews` + `future doc` を release branch から **外す** |
 | 3 | release note refresh | RELEASE_NOTE HEAD/commit count を **実測値で更新** |
 | 4 | 実 e2e | fork CI 前に **local visual-smoke / render** (Roku 環境 main.mp4 fixture 必要) |
@@ -74,16 +74,19 @@ git status --short                                   # 空必須
 
 ## External Actions (権限分類)
 
+**Mission frame** (Roku 2026-05-05 18:06 訂正): fork-only 再現作業の完了条件は **Roku 環境 / fork / local project で SuperMovie pipeline を再現可能にし実証すること**。upstream PR の create / review / merge は **completion 条件に含まない optional_later** で、実行時は Roku 判断 + upstream repo 権限が必要。下表の `gh pr create --repo RenTonoduka/...` 行は handoff 時点の選択肢の 1 つで、Roku 判断後にしか動かない。
+
 | action | 実行者 | 理由 |
 |---|---|---|
 | `gh repo fork RenTonoduka/supermovie --clone=false --remote=false` | **Claude 自走可** (Roku 「OK、推奨から進めて」授権済) | 自分の account への fork、外部副作用なし |
 | `git remote add fork https://github.com/blessing1031r-dotcom/supermovie.git` | Claude 自走可 | local 設定 |
-| `git push -u fork roku/phase3j-timeline` | Claude 自走可 (auth scope `repo` あり、fork 先は own account) | 自 account への push |
-| `gh pr create --repo RenTonoduka/supermovie --head blessing1031r-dotcom:roku/phase3j-timeline --base main --title <X> --body-file <Y>` | Claude 自走可 | fork PR 作成 (upstream maintainer = RenTonoduka が review) |
-| PR review / merge | **Roku 判断 + RenTonoduka 操作必要** | upstream maintainer 権限、destructive action |
+| `git push -u fork <branch>` (own account への fork push、現 branch 例: `roku/observability-doc`) | Claude 自走可 (auth scope `repo` あり、fork 先は own account) | 自 account への push |
+| `gh pr create --repo blessing1031r-dotcom/supermovie --base main --head <branch>` (fork-internal PR、fork-only invariant 整合的) | Claude 自走可 | fork 内 merge 提案、外部 owner 不在 |
+| `gh pr create --repo RenTonoduka/supermovie --head blessing1031r-dotcom:<branch> --base main --title <X> --body-file <Y>` | **Roku 判断** (optional_later、completion 条件外) | upstream への merge 提案 = 段取り判断、外部 owner 経由 |
+| PR review / merge | **Roku 判断 + RenTonoduka 操作必要** (optional_later、completion 条件外) | upstream maintainer 権限、destructive action |
 | `git push --force` (any branch) | **Roku 明示授権必要** | history rewrite、destructive |
 | remote branch delete (`git push fork :branch`) | **Roku 明示授権必要** | destructive |
-| PR close / reopen | **Roku 判断** | upstream PR の段取り |
+| PR close / reopen | **Roku 判断** (optional_later、completion 条件外) | upstream PR の段取り |
 | repo archive 作成 (raw review artifact 別保管用) | **Roku 判断** | 外部 repo 作成、段取り |
 | GitHub re-auth (`gh auth login`) | **Roku 操作必要** (interactive) | Claude bash 経由不可 |
 | rollback (`git revert <sha>`) | Claude 自走可 | local 操作 |
