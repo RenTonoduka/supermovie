@@ -103,6 +103,42 @@ Codex post-freeze priority list (`docs/reviews/CODEX_POST_FREEZE_PRIORITY_202605
 動画教材 / AI アバター解説セミナー / YouTube / ショート編集 の §1-9 構造、§4/§7 は Codex
 fill-in 35 一次情報 citation 付き (`docs/reviews/CODEX_FUTURE_FILLIN_20260505T094327.md`)。
 
+### 8. Post-freeze backlog 第 2 弾 (Codex CODEX_NEXT_PRIORITY 主導)
+
+Codex 第2弾 priority list (`docs/reviews/CODEX_NEXT_PRIORITY_20260505T102232.md`) の P1 / P3 / P4 を消化、P2 は別 cycle (第3弾) として扱い:
+
+- **P1** (a692cde): doc ledger alignment (RELEASE_NOTE HEAD `467ceec`→`7eeeb92`、commit count、test 数 20→27 / 18→22、§7 post-freeze 第1弾 sec 新設)
+- **P3** (69fd090): voicevox_narration `--json-log` 追加 (proof of concept、既存 stdout 完全互換、emit_json helper、後で全 return path 拡張)
+- **P4** (e8da4bd): visual_smoke mock fixture (patch_format / no-match / round trip / FORMAT_DIMS、main.mp4 不要 4 件)
+- Codex review (CODEX_2ND_BATCH_REVIEW、3 finds: P1 emit_json 全 return path / P2 PROGRESS test 数 / P2 cli mock fixture) → fix (3fb226a) + re-review (CODEX_2ND_BATCH_REREVIEW で **P0/P1/P3 NONE verdict**、loop closure)
+
+### 9. Post-freeze backlog 第 3 弾 (P2 cost guard + P3 logging extension)
+
+Codex 第2弾 P2 (consult 先行必要) を独立 cycle として:
+
+- **P2** (2455987 → d556746、CODEX_P2_COST_GUARD_DESIGN §1-5 準拠): generate_slide_plan に Anthropic API cost guard
+  - `--max-tokens` (default 4096、cap 16384、env SUPERMOVIE_MAX_TOKENS) で API max_tokens override
+  - `--max-input-words` / `--max-input-segments` で transcript 入力 cap (env override 可)
+  - `--dry-run` で API 呼ばず estimate JSON (14 field、ceil(prompt_chars/4)、rate 設定時のみ $ 推定、HARD RULE「根拠なき具体性」回避で価格 hardcode せず env/arg のみ)
+  - HTTP 429 を exit 9 (rate_limited) で分離、retry-after header 拾い
+  - HTTP 非 429 は exit 4 維持 (api_http_error)
+  - Codex P2 review fix (d556746): API key skip 順序復旧 / nan-inf rejection / 1M cap 削除 / regression test +2
+  - Codex P2 re-review (CODEX_P2_COST_GUARD_REREVIEW で **P0/P1/P3 NONE verdict**、loop closure)
+- **P3 logging extension** (a1043ae → 5e21363、Codex P2 design §4 別 PR): generate_slide_plan に `--json-log` + emit_json + 全 return path status 化 (api_key_skipped / cost_guard_arg_invalid / inputs_missing / rate_limited / api_http_error / llm_json_invalid / success の 7 status、dry_run は既存単一 JSON 維持)
+  - Codex P3 slide-plan review fix (e4dc3f0): human stdout 維持 assert / PROGRESS test 数 35→43 / npm run test 注記 整合
+  - Codex P3 re-review (CODEX_P3_SLIDE_PLAN_REREVIEW で **P0/P1 NONE verdict**、loop closure)
+
+### post-freeze 累積結果 (head 8ece22f 時点、Bash 実測)
+
+| metric | Phase 3-V FINAL | post-freeze 累積 |
+|---|---|---|
+| python smoke | 20/20 | **43/43** (Phase 3 23 + sentinel 4 + visual_smoke 4 + json-log 3 + cli mismatch 1 + P2 cost guard 5 + P2 review regression 2 + slide-plan json-log 1) |
+| React component test | 18/18 | **22/22** (旧 18 + sentinel trigger / null guard / dedup / coalescing 4) |
+| TypeScript lint | exit 0 (warn) | exit 0 (`no-explicit-any` error 化、any-free contract 機械 gate) |
+| 6 gate composite | ALL PASS | **ALL PASS** 維持 |
+| Codex 4 step loop closure | 14 review | **+post-freeze 7 cycle**: P5 re-review / 第2弾 batch re-review / P2 re-review / P3 re-review すべて P0/P1 NONE |
+| docs/reviews/ artifact | 23 件 | **40+ 件** (P5 design / P2 design / NEXT_PRIORITY / FUTURE_FILLIN 等含む) |
+
 ## test gate コマンド
 
 ```bash
