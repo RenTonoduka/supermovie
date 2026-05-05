@@ -1,6 +1,6 @@
 # CONTEXT_ANCHOR — SuperMovie Repo (Codex 主・Claude 従)
 
-本 anchor は Roku 2026-05-05 11:38 確定の役割再定義 + Codex 命令 (CODEX_NEXT_STEP_INSTRUCTION_20260505T114718.md §A) に基づく作業中継 doc。push/PR 前に必ず最新化、Codex review prompt の先頭で本 doc 参照。欠落・stale なら Codex review で P1 扱い。
+本 anchor は Roku 2026-05-05 11:38 確定の役割再定義 + 当時の Codex 命令 (CODEX_NEXT_STEP_INSTRUCTION 20260505T114718、artifact 喪失 / 内容は本 anchor §Verified Snapshot 〜 §Codex Review Protocol に反映済) に基づく作業中継 doc。push/PR 前に必ず最新化、Codex review prompt の先頭で本 doc 参照。欠落・stale なら Codex review で P1 扱い。
 
 ## Purpose
 
@@ -106,7 +106,7 @@ Codex review prompt の先頭で必ず本 anchor を参照させる:
 
 ## Related Files
 
-- 元 Codex 命令: `docs/reviews/CODEX_NEXT_STEP_INSTRUCTION_20260505T114718.md`
-- 元 Codex full review: `docs/reviews/CODEX_FULL_SESSION_REVIEW_20260505T113913.md`
+- 元 Codex 命令: CODEX_NEXT_STEP_INSTRUCTION 20260505T114718 (artifact 喪失、内容は本 anchor に反映済)
+- 元 Codex full review: CODEX_FULL_SESSION_REVIEW 20260505T113913 (cleanup commit `e0f5107` で release branch から外し済み、commit history で参照可)
 - セッション handoff: `/Users/rokumasuda/0_Daily-Workspace/handoff_2026-05-05_supermovie-codex-pivot-overage.md`
 - Memory 運用ルール: `~/.claude/projects/-Users-rokumasuda/memory/feedback_codex_master_claude_implementer.md`
