@@ -3,13 +3,14 @@
 // export named 'default'` で fail するため、named import に切り替える。
 import { config } from "@remotion/eslint-config-flat";
 
-// telop-templates-30.zip 由来の component が `any` を使っているため、
-// no-explicit-any は warning に緩和。型を厳密化するのは別 issue。
+// Phase 3-R で telop component の any を 0 化済み (telopConfigTypes.ts 9 interface
+// + Telop.tsx escape 全削除 + literal narrowing)、Phase 3-V FINAL verdict 後に warn → error
+// に固定し any-free contract を機械 gate 化 (template/src の any 使用 0、Bash grep 実測)。
 export default [
   ...config,
   {
     rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-explicit-any": "error",
     },
   },
 ];
