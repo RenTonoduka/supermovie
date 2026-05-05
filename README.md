@@ -59,9 +59,12 @@ cd ~/.claude/plugins/supermovie && git pull
 # テンプレートからプロジェクト作成
 cp -r template/ my-video-project/
 cd my-video-project/
+bash ../scripts/safe_rsync.sh --init-sentinel --dest .  # safe rsync 用 sandbox sentinel 作成
 npm install
 npm run dev    # Remotion Studio起動
 ```
+
+> **既存 project への template 同期は `rsync --delete` 直接禁止**。Roku の前 work artifact (`typo_dict.json` / `transcript_*.json` / `vad_result.json` 等) を消す事故が 2026-05-05 16:14 に発生済み。template 同期は `bash scripts/safe_rsync.sh --source <repo>/template --dest <project>` を使う (default dry-run、`--apply` で実 sync、`scripts/safe_rsync.protect` の protect list 違反時に停止)。
 
 ## テンプレート構成
 

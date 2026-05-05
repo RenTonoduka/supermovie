@@ -1,0 +1,54 @@
+# safe_rsync.protect — versioned protect list for safe_rsync.sh
+#
+# Format: 1 path pattern per line, blank lines and lines starting with '#' are ignored.
+# Patterns are passed to rsync as filter rules: `P pattern` (deletion protection)
+# AND scanned in pre-apply dry-run for any update/overwrite/delete attempt.
+#
+# Codex consult bhrcsxwga (2026-05-05 16:36) verdict 準拠の最小 default protect list.
+# 漏れがあれば追加、ただし削除は CONTEXT_ANCHOR 必須.
+
+# === sandbox sentinel (本 wrapper 自身が生成 / 検出する file) ===
+.supermovie-sandbox
+
+# === Roku が手作業 / 半自動で蓄積した artifact (再生成不可 or 高コスト再生成) ===
+typo_dict.json
+transcript_corrections.json
+
+# === transcribe / cut pipeline 出力 (再生成可だが時間 + LLM cost かかる) ===
+transcript.json
+transcript_raw.json
+transcript_fixed.json
+transcript.dict_fixed.json
+transcript_audio.wav
+vad_result.json
+vad_runner.py
+
+# === project-specific config / fixture (machine-local、上書き禁止) ===
+project-config.json
+public/main.mp4
+public/BGM/***
+public/se/***
+public/images/***
+public/narration*
+
+# === skill-generated data (telop / title / slide / image / SE / cut) ===
+src/cutData.ts
+src/InsertImage/insertImageData.ts
+src/Title/titleData.ts
+src/SoundEffects/seData.ts
+src/テロップテンプレート/telopData.ts
+src/Narration/narrationData.ts
+
+# === local development / build artifacts (rsync で上書きせず保持) ===
+node_modules/***
+out/***
+.venv/***
+.env
+.env.*
+
+# === 編集者個人設定 / VCS 内部 ===
+.git/***
+.gitignore
+.prettierrc
+.vscode/***
+.idea/***
