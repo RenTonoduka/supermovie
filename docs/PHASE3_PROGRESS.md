@@ -138,9 +138,11 @@ main
 - supermovie-se 統合 (素材判断)
 - SadTalker / HeyGen / Kling 統合 (法的 / モラルリスク + API 課金)
 
-## 全 commit count (roku/phase3j-timeline branch、最新 118 件)
+## 全 commit count (roku/phase3j-timeline branch、最新 120 件)
 
 ```
+8267628 docs(observability): add :351 non-429 body partial line to migration target (Codex 20:23 3rd review P2)
+c12b3fd docs(phase3): refresh anchor/progress to 322e7b9 / 136 / 118 — Codex 20:14 re-review fix iter 反映
 322e7b9 fix(observability): mapping completeness + redaction default strict + migration line numbers (Codex 20:14 re-review P1+P2)
 edb0e98 docs(phase3): refresh anchor/progress to 64bce34 / 134 / 116 — Codex 20:08 review fix iter 反映
 64bce34 fix(observability)+docs(phase3): v0→v1 status mapping + redaction strict + mission frame patch (Codex 20:08 review P1)
@@ -261,7 +263,7 @@ e2a1a39 fix(timeline): Codex Phase 3-J review 4 件 fix (P1×1 + P2×2 + P3×1)
 66e2aeb feat(timeline): timeline.py 共通化 + Phase 3-I review 6 件 fix (Phase 3-J)
 ```
 
-(更新: 2026-05-05_20:20、source=HEAD、`scripts/regen_phase3_progress.sh` で auto-gen。
+(更新: 2026-05-05_20:25、source=HEAD、`scripts/regen_phase3_progress.sh` で auto-gen。
 本 script で regen → docs commit する形のため、docs 上の commit chain は
 docs commit を作る前の HEAD を反映する設計 (off-by-one は intrinsic、
 `--verify` mode で count drift を CI 検査可)。)
