@@ -97,7 +97,7 @@ npm run lint   # eslint + tsc (静的検査)
 
 質問の解決経路:
 - Roku 自身の internal project memory store (本 doc に絶対 path は書かない、Roku machine 固有の場所)
-- Codex consult (本 repo の `docs/api_operation_guard.md` / `docs/debug_guide.md` 等の規約 doc)
+- Codex consult (本 doc + 別 PR で追加予定の API operation guard doc 等の規約 doc)
 - 公式 Remotion docs (`https://www.remotion.dev/`)
 - 公式 Gemini API docs (`https://ai.google.dev/`)
 - 内部の Roku + Codex consult cycle
