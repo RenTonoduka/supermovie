@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -113,7 +114,11 @@ def _resolve_decimal(
     cli_val: float | None,
     env_name: str,
 ) -> float | None:
-    """CLI > env > None の precedence で decimal 解決 (>=0)。範囲違反は ValueError。"""
+    """CLI > env > None の precedence で decimal 解決 (finite + >=0)。範囲違反は ValueError。
+
+    Codex P2 review P2 反映 (CODEX_P2_COST_GUARD_REVIEW:7-9):
+    `math.isfinite` を必須化し、nan/inf を禁止 (cost estimate を破壊するため)。
+    """
     if cli_val is not None:
         v = cli_val
         source = f"--{env_name.lower()}"
@@ -128,6 +133,8 @@ def _resolve_decimal(
                 f"{env_name}={env_str!r} は decimal に変換できません: {e}"
             ) from e
         source = f"env {env_name}"
+    if not math.isfinite(v):
+        raise ValueError(f"{source}={v} は finite (nan/inf 禁止)")
     if v < 0:
         raise ValueError(f"{source}={v} は >=0 必須")
     return v
@@ -158,15 +165,27 @@ def main():
                     help="output cost rate USD/MTok (env: SUPERMOVIE_RATE_OUTPUT_PER_MTOK)")
     args = ap.parse_args()
 
+    # Codex P2 review P1 反映 (CODEX_P2_COST_GUARD_REVIEW:3-5):
+    # API key 未設定 skip は cost guard env 解決より前に判定する。
+    # 既存 no-key skip 互換 (env が壊れていても skip 0 で通る) を維持し、
+    # dry-run のみ API key 不要で env/arg validation を行う。
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key and not args.dry_run:
+        print("INFO: ANTHROPIC_API_KEY 未設定 → slide_plan 生成 skip")
+        print("      build_slide_data.py は --plan 無しで deterministic に走ります")
+        return 0
+
     # cost guard arg 解決 (CLI > env > default)
     try:
         max_tokens = _resolve_int(
             args.max_tokens, "SUPERMOVIE_MAX_TOKENS",
             MAX_TOKENS_DEFAULT, 1, MAX_TOKENS_CAP, "max-tokens",
         )
+        # Codex P2 review P3 反映: design spec は ">=1"、不要な 1M 上限を削除
+        # (実装側 hardcode で design と乖離していた箇所を修正、cap は max-tokens のみ保持)
         max_input_words = _resolve_int(
             args.max_input_words, "SUPERMOVIE_MAX_INPUT_WORDS",
-            MAX_INPUT_WORDS_DEFAULT, 1, 1_000_000, "max-input-words",
+            MAX_INPUT_WORDS_DEFAULT, 1, sys.maxsize, "max-input-words",
         )
         # max-input-segments は default unset
         if args.max_input_segments is not None:
@@ -193,13 +212,6 @@ def main():
     except ValueError as e:
         print(f"ERROR: cost guard arg invalid: {e}", file=sys.stderr)
         return 4
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    # dry-run は API key 不要 (config 解決のみ)
-    if not api_key and not args.dry_run:
-        print("INFO: ANTHROPIC_API_KEY 未設定 → slide_plan 生成 skip")
-        print("      build_slide_data.py は --plan 無しで deterministic に走ります")
-        return 0
 
     transcript_path = PROJ / "transcript_fixed.json"
     config_path = PROJ / "project-config.json"
@@ -250,7 +262,6 @@ def main():
     # (Codex CODEX_P2_COST_GUARD_DESIGN §1 / §3、HARD RULE「根拠なき具体性」回避で
     # rate hardcode せず env/arg で受領、estimation_method を明示)
     if args.dry_run:
-        import math
         prompt_chars = len(prompt)
         estimated_input_tokens = math.ceil(prompt_chars / 4)
         estimated_output_tokens_upper_bound = max_tokens

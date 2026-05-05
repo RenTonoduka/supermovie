@@ -1105,6 +1105,103 @@ def test_generate_slide_plan_max_tokens_cap_rejects() -> None:
             gsp.PROJ = original_proj
 
 
+def test_generate_slide_plan_skip_preserves_with_bad_env() -> None:
+    """Phase 3-V P2 review P1 fix (CODEX_P2_COST_GUARD_REVIEW:3-5):
+    API key 未設定 skip は cost guard env 解決より前に実行される (既存挙動維持)。
+
+    SUPERMOVIE_MAX_TOKENS=bad のような壊れた env でも、API key unset なら
+    cost guard 解決を skip して exit 0 で抜ける。
+    """
+    import generate_slide_plan as gsp
+    import os as _os
+
+    original_proj = gsp.PROJ
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")
+    original_env_max = _os.environ.get("SUPERMOVIE_MAX_TOKENS")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        gsp.PROJ = proj
+        _os.environ.pop("ANTHROPIC_API_KEY", None)
+        _os.environ["SUPERMOVIE_MAX_TOKENS"] = "not-an-int"
+        try:
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["generate_slide_plan.py"]
+            try:
+                ret = gsp.main()
+                assert_eq(ret, 0, "API key unset + bad env → skip 0 (P1 fix)")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            if original_api_key is None:
+                _os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                _os.environ["ANTHROPIC_API_KEY"] = original_api_key
+            if original_env_max is None:
+                _os.environ.pop("SUPERMOVIE_MAX_TOKENS", None)
+            else:
+                _os.environ["SUPERMOVIE_MAX_TOKENS"] = original_env_max
+            gsp.PROJ = original_proj
+
+
+def test_generate_slide_plan_rate_rejects_nan_inf() -> None:
+    """Phase 3-V P2 review P2 fix (CODEX_P2_COST_GUARD_REVIEW:7-9):
+    rate-input/rate-output の nan/inf を拒否 (math.isfinite check)、exit 4."""
+    import generate_slide_plan as gsp
+    import os as _os
+
+    original_proj = gsp.PROJ
+    original_api_key = _os.environ.get("ANTHROPIC_API_KEY")
+    original_env_rate_in = _os.environ.get("SUPERMOVIE_RATE_INPUT_PER_MTOK")
+    original_env_rate_out = _os.environ.get("SUPERMOVIE_RATE_OUTPUT_PER_MTOK")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        gsp.PROJ = proj
+        # 入力ファイル不要 (cost guard arg validation で先に exit 4)
+        _os.environ["ANTHROPIC_API_KEY"] = "fake"
+        try:
+            # CLI nan
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["generate_slide_plan.py", "--rate-input", "nan"]
+            try:
+                ret = gsp.main()
+                assert_eq(ret, 4, "--rate-input=nan → exit 4")
+            finally:
+                _sys.argv = old_argv
+            # CLI inf
+            _sys.argv = ["generate_slide_plan.py", "--rate-input", "inf"]
+            try:
+                ret = gsp.main()
+                assert_eq(ret, 4, "--rate-input=inf → exit 4")
+            finally:
+                _sys.argv = old_argv
+            # env nan via SUPERMOVIE_RATE_OUTPUT_PER_MTOK
+            _os.environ["SUPERMOVIE_RATE_OUTPUT_PER_MTOK"] = "nan"
+            _sys.argv = ["generate_slide_plan.py"]
+            try:
+                ret = gsp.main()
+                assert_eq(ret, 4, "env rate_output=nan → exit 4")
+            finally:
+                _sys.argv = old_argv
+        finally:
+            if original_api_key is None:
+                _os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                _os.environ["ANTHROPIC_API_KEY"] = original_api_key
+            if original_env_rate_in is None:
+                _os.environ.pop("SUPERMOVIE_RATE_INPUT_PER_MTOK", None)
+            else:
+                _os.environ["SUPERMOVIE_RATE_INPUT_PER_MTOK"] = original_env_rate_in
+            if original_env_rate_out is None:
+                _os.environ.pop("SUPERMOVIE_RATE_OUTPUT_PER_MTOK", None)
+            else:
+                _os.environ["SUPERMOVIE_RATE_OUTPUT_PER_MTOK"] = original_env_rate_out
+            gsp.PROJ = original_proj
+
+
 def test_generate_slide_plan_max_input_caps_prompt() -> None:
     """Phase 3-V P2: --max-input-words / --max-input-segments で prompt 入力 cap."""
     import generate_slide_plan as gsp
@@ -2257,6 +2354,8 @@ def main() -> int:
         test_generate_slide_plan_dry_run_no_api_key,
         test_generate_slide_plan_max_tokens_override_cli_env_precedence,
         test_generate_slide_plan_max_tokens_cap_rejects,
+        test_generate_slide_plan_skip_preserves_with_bad_env,
+        test_generate_slide_plan_rate_rejects_nan_inf,
         test_generate_slide_plan_max_input_caps_prompt,
         test_generate_slide_plan_api_invalid_json,
         test_build_slide_data_plan_validation_fallback,
