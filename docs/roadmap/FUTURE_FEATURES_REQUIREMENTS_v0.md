@@ -254,4 +254,4 @@
 
 ---
 
-**起草経緯メモ**: 当初 Codex に 1 prompt で全 8 章を起草依頼したが、30 min 進捗 0 で stuck (PID 73874 sleeping、tee buffer 0 byte)。Codex CLI 健全性は別途 tiny test (`OK alive`) で確認、複合 prompt の生成失敗が原因と推定。v0 は構造・verifiable 部分を Claude 起草、詳細 marker を smaller scope で再 consult する分担に切替 → §4/§7 fill-in は CODEX_FUTURE_FILLIN_20260505T094327.md 経由で 35 一次情報 citation 付き integrate (本 commit)。
+**起草経緯メモ**: 当初 Codex に 1 prompt で全 8 章を起草依頼したが、30 min 進捗 0 で stuck (PID 73874 sleeping、tee buffer 0 byte)。Codex CLI 健全性は別途 tiny test (`OK alive`) で確認、複合 prompt の生成失敗が原因と推定。v0 は構造・verifiable 部分を Claude 起草、詳細 marker を smaller scope で再 consult する分担に切替 → §4/§7 fill-in は CODEX_FUTURE_FILLIN 20260505T094327 経由で 35 citations、一次情報中心、一部は第三者 (G2 / Renderful 等) または報道として明示 integrate (本 commit)。
