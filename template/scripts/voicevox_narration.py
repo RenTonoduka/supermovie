@@ -43,6 +43,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -70,6 +71,13 @@ NARRATION_DIR = PROJ / "public" / "narration"
 NARRATION_LEGACY_WAV = PROJ / "public" / "narration.wav"
 NARRATION_DATA_TS = PROJ / "src" / "Narration" / "narrationData.ts"
 CHUNK_META_JSON = NARRATION_DIR / "chunk_meta.json"
+# Phase 3-V post-freeze P5 (Codex CODEX_P5_VOICEVOX_SENTINEL_DESIGN_20260505T095934.md):
+# publish 完了 signal sentinel。chunks → narrationData.ts → narration.wav 書き終わりの
+# 最後に置く。Studio 側 useNarrationMode hook が watchStaticFile で監視して invalidate +
+# setMode を発火する。root 配置 (subdirectory ではない) は Linux watchStaticFile 制約への
+# 保守性で選択 (Remotion getStaticFiles docs: https://www.remotion.dev/docs/getstaticfiles)。
+NARRATION_READY_JSON = PROJ / "public" / "narration.ready.json"
+SENTINEL_SCHEMA_VERSION = 1
 EMPTY_NARRATION_DATA = (
     "import type { NarrationSegment } from './types';\n"
     "\n"
@@ -238,6 +246,14 @@ def cleanup_stale_all() -> None:
             raise StaleCleanupError(
                 f"stale narration.wav 削除失敗、stale legacy 再生事故防止のため処理中断: {e}"
             ) from e
+    # Phase 3-V P5 sentinel: stale ready file は必ず削除 (Studio で旧 signal key を
+    # 読んで「ready」と誤判定する事故防止)。削除失敗は WARN 継続 (sentinel 単独で
+    # legacy mode に flip する経路はないため)。
+    if NARRATION_READY_JSON.exists():
+        try:
+            NARRATION_READY_JSON.unlink()
+        except OSError as e:
+            print(f"WARN: stale narration.ready.json 削除失敗: {e}", file=sys.stderr)
     reset_narration_data_ts()
 
 
@@ -245,6 +261,24 @@ def reset_narration_data_ts() -> None:
     """narrationData.ts を空 array に戻す (Phase 3-H all-or-nothing)、atomic 書換。"""
     if NARRATION_DATA_TS.parent.exists():
         atomic_write_text(NARRATION_DATA_TS, EMPTY_NARRATION_DATA)
+
+
+def write_narration_ready(chunk_count: int, total_frames: int) -> None:
+    """Phase 3-V post-freeze P5: publish 完了 signal sentinel を atomic 書換.
+
+    Codex CODEX_P5_VOICEVOX_SENTINEL_DESIGN_20260505T095934.md §1 設計準拠:
+    最小 JSON {schemaVersion, status, chunkCount, totalFrames, generatedAtMs} で、
+    chunks → narrationData.ts → narration.wav 全成功後の最後に書く。Studio 側は
+    中身を必須 read しない (lastModified / sizeInBytes の signal key で dedup 駆動)。
+    """
+    payload = {
+        "schemaVersion": SENTINEL_SCHEMA_VERSION,
+        "status": "ready",
+        "chunkCount": chunk_count,
+        "totalFrames": total_frames,
+        "generatedAtMs": int(time.time() * 1000),
+    }
+    atomic_write_text(NARRATION_READY_JSON, json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 def project_load_cut_segments(fps: int) -> list[dict]:
@@ -659,6 +693,44 @@ def main():
     print(f"\nwrote: {out_path} ({out_path.stat().st_size} bytes)")
     print(f"chunks succeeded: {len(chunk_paths)} / {len(chunks)} synthesized")
 
+    # Phase 3-V post-freeze P5: publish 完了 signal sentinel を最後に書く
+    # (Codex CODEX_P5_VOICEVOX_SENTINEL_DESIGN_20260505T095934.md §1 / §3)。
+    # 失敗時は chunks / narration.wav / chunk_meta.json / narrationData.ts /
+    # sentinel 全 rollback で all-or-nothing contract を維持 (concat fail と同型)。
+    try:
+        write_narration_ready(len(chunk_paths), total_frames)
+    except Exception as e:
+        print(
+            f"ERROR: narration.ready.json write failed: {type(e).__name__}: {e}",
+            file=sys.stderr,
+        )
+        for p in chunk_paths:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        if NARRATION_LEGACY_WAV.exists():
+            try:
+                NARRATION_LEGACY_WAV.unlink()
+            except OSError:
+                pass
+        try:
+            reset_narration_data_ts()
+        except OSError:
+            pass
+        if CHUNK_META_JSON.exists():
+            try:
+                CHUNK_META_JSON.unlink()
+            except OSError:
+                pass
+        if NARRATION_READY_JSON.exists():
+            try:
+                NARRATION_READY_JSON.unlink()
+            except OSError:
+                pass
+        return 6
+    print(f"wrote: {NARRATION_READY_JSON} (publish 完了 signal sentinel)")
+
     summary = {
         "speaker": args.speaker,
         "fps": fps,
@@ -672,6 +744,7 @@ def main():
         "narration_wav": str(out_path),
         "narration_data_ts": str(ts_path),
         "chunk_meta_json": str(meta_path),
+        "narration_ready_json": str(NARRATION_READY_JSON),
         "engine_version": info,
     }
     print(f"\nsummary: {json.dumps(summary, ensure_ascii=False)}")

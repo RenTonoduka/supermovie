@@ -5,6 +5,19 @@ import type { NarrationSegment } from './types';
 export const NARRATION_LEGACY_FILE = 'narration.wav';
 
 /**
+ * Phase 3-V post-freeze P5 (Codex CODEX_P5_VOICEVOX_SENTINEL_DESIGN §1):
+ * voicevox_narration.py の publish 完了 signal。chunks → narrationData.ts →
+ * narration.wav 書き終わりの最後に root 配置 (`public/narration.ready.json`)。
+ * Studio runtime は中身を読まず、`watchStaticFile()` callback の `lastModified` /
+ * `sizeInBytes` を signal key にして dedup する。
+ *
+ * root 配置の根拠: Remotion `getStaticFiles()` docs は Linux subdirectory 監視に
+ * Node.js 条件があり、root 配置の方が保守的 (出典:
+ * https://www.remotion.dev/docs/getstaticfiles)。
+ */
+export const NARRATION_READY_FILE = 'narration.ready.json';
+
+/**
  * Phase 3-H Codex review P1 #1 反映:
  * NarrationAudio と MainVideo が narration の状態を別々に判定すると、
  * chunk 不足 + legacy 存在で「narration も base 元音声も無音」になる

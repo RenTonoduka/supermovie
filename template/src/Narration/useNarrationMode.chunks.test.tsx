@@ -130,12 +130,30 @@ describe('useNarrationMode (chunks mode)', () => {
     expect(result.current.kind).toBe('none');
   });
 
-  it('registers 1 + chunk count watchers, all canceled on unmount', () => {
+  it('registers 2 + chunk count watchers (sentinel + legacy + chunks), all canceled on unmount', () => {
     const { unmount } = renderHook(() => useNarrationMode());
-    // narration.wav (1) + chunk_000.wav + chunk_001.wav (2) = 3 watchers
-    expect(remotionMock.__getWatcherCount()).toBe(3);
+    // Phase 3-V P5: narration.ready.json sentinel (1) + narration.wav (1) +
+    // chunk_000.wav + chunk_001.wav (2) = 4 watchers
+    expect(remotionMock.__getWatcherCount()).toBe(4);
     unmount();
     expect(remotionMock.__getWatcherCount()).toBe(0);
+  });
+
+  it('sentinel trigger re-evaluates mode (chunks visible after ready signal)', () => {
+    // 初期: chunk file 不在で none
+    remotionMock.__setStaticFiles([]);
+    const { result } = renderHook(() => useNarrationMode());
+    expect(result.current.kind).toBe('none');
+    // chunks + sentinel が現れた後、sentinel trigger で再評価
+    act(() => {
+      remotionMock.__setStaticFiles([
+        { name: 'narration/chunk_000.wav' },
+        { name: 'narration/chunk_001.wav' },
+        { name: 'narration.ready.json' },
+      ]);
+      remotionMock.__triggerWatch('narration.ready.json');
+    });
+    expect(result.current.kind).toBe('chunks');
   });
 
   it('chunk watch trigger re-evaluates mode (incomplete → complete chunks)', () => {

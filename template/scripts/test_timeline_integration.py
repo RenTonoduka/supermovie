@@ -1193,6 +1193,246 @@ def test_build_cut_segments_multi_with_gaps() -> None:
     assert_eq(cuts[2]["playbackEnd"], 105, "seg2 playbackEnd (cumulative 3500ms = 105 frames)")
 
 
+def test_voicevox_cleanup_stale_unlinks_sentinel() -> None:
+    """Phase 3-V P5: cleanup_stale_all() が stale narration.ready.json を削除."""
+    import voicevox_narration as vn
+
+    state = {
+        "PROJ": vn.PROJ,
+        "NARRATION_DIR": vn.NARRATION_DIR,
+        "NARRATION_DATA_TS": vn.NARRATION_DATA_TS,
+        "CHUNK_META_JSON": vn.CHUNK_META_JSON,
+        "NARRATION_LEGACY_WAV": vn.NARRATION_LEGACY_WAV,
+        "NARRATION_READY_JSON": vn.NARRATION_READY_JSON,
+    }
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp)
+            vn.PROJ = proj
+            vn.NARRATION_DIR = proj / "public" / "narration"
+            vn.NARRATION_DATA_TS = proj / "src" / "Narration" / "narrationData.ts"
+            vn.CHUNK_META_JSON = vn.NARRATION_DIR / "chunk_meta.json"
+            vn.NARRATION_LEGACY_WAV = proj / "public" / "narration.wav"
+            vn.NARRATION_READY_JSON = proj / "public" / "narration.ready.json"
+            (proj / "src" / "Narration").mkdir(parents=True)
+            (proj / "public").mkdir(parents=True)
+
+            # Pre-create stale sentinel + stale narrationData.ts
+            vn.NARRATION_READY_JSON.write_text(
+                '{"schemaVersion":1,"status":"ready","chunkCount":3,"totalFrames":99,"generatedAtMs":1000}',
+                encoding="utf-8",
+            )
+            vn.NARRATION_DATA_TS.write_text(
+                "// stale stub\nexport const narrationData = [];\n", encoding="utf-8"
+            )
+            if not vn.NARRATION_READY_JSON.exists():
+                raise AssertionError("pre-cond: stale sentinel must exist")
+
+            vn.cleanup_stale_all()
+
+            if vn.NARRATION_READY_JSON.exists():
+                raise AssertionError(
+                    "cleanup_stale_all failed to remove stale narration.ready.json"
+                )
+    finally:
+        for k, v in state.items():
+            setattr(vn, k, v)
+
+
+def test_voicevox_sentinel_written_after_wav() -> None:
+    """Phase 3-V P5: sentinel write 順序 narration.wav → narration.ready.json verify.
+
+    write_narration_ready の mock が「narration.wav existence を assert + 元実装に
+    delegate」する形で、call 時点で narration.wav が出ていなければ raise。旧順序
+    (sentinel 先) に regress すると必ず fail。
+    """
+    import voicevox_narration as vn
+
+    state = {
+        "PROJ": vn.PROJ,
+        "NARRATION_DIR": vn.NARRATION_DIR,
+        "NARRATION_DATA_TS": vn.NARRATION_DATA_TS,
+        "CHUNK_META_JSON": vn.CHUNK_META_JSON,
+        "NARRATION_LEGACY_WAV": vn.NARRATION_LEGACY_WAV,
+        "NARRATION_READY_JSON": vn.NARRATION_READY_JSON,
+    }
+    original_concat = vn.concat_wavs_atomic
+    original_check_engine = vn.check_engine
+    original_synthesize = vn.synthesize
+    original_write_ready = vn.write_narration_ready
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp)
+            vn.PROJ = proj
+            vn.NARRATION_DIR = proj / "public" / "narration"
+            vn.NARRATION_DATA_TS = proj / "src" / "Narration" / "narrationData.ts"
+            vn.CHUNK_META_JSON = vn.NARRATION_DIR / "chunk_meta.json"
+            vn.NARRATION_LEGACY_WAV = proj / "public" / "narration.wav"
+            vn.NARRATION_READY_JSON = proj / "public" / "narration.ready.json"
+            (proj / "src" / "Narration").mkdir(parents=True)
+            (proj / "src" / "videoConfig.ts").write_text(
+                make_videoconfig_ts(30), encoding="utf-8"
+            )
+            (proj / "transcript_fixed.json").write_text(
+                json.dumps({"segments": [{"text": "hi", "start": 0, "end": 1000}]}),
+                encoding="utf-8",
+            )
+
+            import wave as _wave
+            import io as _io
+            import struct as _struct
+
+            buf = _io.BytesIO()
+            with _wave.open(buf, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(22050)
+                w.writeframes(_struct.pack("<22050h", *([0] * 22050)))
+            wav_bytes = buf.getvalue()
+
+            vn.check_engine = lambda: (True, "0.0.0-test")
+            vn.synthesize = lambda text, speaker: wav_bytes
+
+            # concat: 実際に narration.wav を書く (next step で sentinel check が exists を見る)
+            def real_concat(wavs, out_path):
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_bytes(wav_bytes)
+
+            vn.concat_wavs_atomic = real_concat
+
+            # sentinel write 順序 check + delegate
+            order_log = []
+
+            def assert_sentinel_after_wav(chunk_count, total_frames):
+                if not vn.NARRATION_LEGACY_WAV.exists():
+                    order_log.append("FAIL: narration.wav missing when sentinel write called")
+                    raise RuntimeError("write order regression: narration.wav missing")
+                order_log.append("OK: narration.wav exists before sentinel write")
+                original_write_ready(chunk_count, total_frames)
+
+            vn.write_narration_ready = assert_sentinel_after_wav
+
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["voicevox_narration.py"]
+            try:
+                ret = vn.main()
+            finally:
+                _sys.argv = old_argv
+
+            assert_eq(ret, 0, "successful main() exit 0")
+            if not order_log or "OK:" not in order_log[0]:
+                raise AssertionError(
+                    f"sentinel write order regression: {order_log}"
+                )
+            if not vn.NARRATION_READY_JSON.exists():
+                raise AssertionError("sentinel file not created after success")
+            payload = json.loads(vn.NARRATION_READY_JSON.read_text(encoding="utf-8"))
+            assert_eq(payload.get("schemaVersion"), 1, "sentinel schemaVersion=1")
+            assert_eq(payload.get("status"), "ready", "sentinel status=ready")
+            assert_eq(payload.get("chunkCount"), 1, "sentinel chunkCount=1")
+            if not isinstance(payload.get("totalFrames"), int):
+                raise AssertionError(
+                    f"sentinel totalFrames must be int, got {type(payload.get('totalFrames'))}"
+                )
+            if not isinstance(payload.get("generatedAtMs"), int):
+                raise AssertionError(
+                    f"sentinel generatedAtMs must be int, got {type(payload.get('generatedAtMs'))}"
+                )
+    finally:
+        for k, v in state.items():
+            setattr(vn, k, v)
+        vn.concat_wavs_atomic = original_concat
+        vn.check_engine = original_check_engine
+        vn.synthesize = original_synthesize
+        vn.write_narration_ready = original_write_ready
+
+
+def test_voicevox_sentinel_rollback_on_concat_fail() -> None:
+    """Phase 3-V P5: concat 失敗時に sentinel が残らない (all-or-nothing 維持).
+
+    concat_wavs_atomic を強制 PermissionError で fail させ、rollback 経路後に
+    NARRATION_READY_JSON が存在しないことを確認。sentinel は concat 後に書く設計
+    なので、concat fail 経路では当然書かれないが、defensive verification として明示。
+    """
+    import voicevox_narration as vn
+
+    state = {
+        "PROJ": vn.PROJ,
+        "NARRATION_DIR": vn.NARRATION_DIR,
+        "NARRATION_DATA_TS": vn.NARRATION_DATA_TS,
+        "CHUNK_META_JSON": vn.CHUNK_META_JSON,
+        "NARRATION_LEGACY_WAV": vn.NARRATION_LEGACY_WAV,
+        "NARRATION_READY_JSON": vn.NARRATION_READY_JSON,
+    }
+    original_concat = vn.concat_wavs_atomic
+    original_check_engine = vn.check_engine
+    original_synthesize = vn.synthesize
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp)
+            vn.PROJ = proj
+            vn.NARRATION_DIR = proj / "public" / "narration"
+            vn.NARRATION_DATA_TS = proj / "src" / "Narration" / "narrationData.ts"
+            vn.CHUNK_META_JSON = vn.NARRATION_DIR / "chunk_meta.json"
+            vn.NARRATION_LEGACY_WAV = proj / "public" / "narration.wav"
+            vn.NARRATION_READY_JSON = proj / "public" / "narration.ready.json"
+            (proj / "src" / "Narration").mkdir(parents=True)
+            (proj / "src" / "videoConfig.ts").write_text(
+                make_videoconfig_ts(30), encoding="utf-8"
+            )
+            (proj / "transcript_fixed.json").write_text(
+                json.dumps({"segments": [{"text": "hi", "start": 0, "end": 1000}]}),
+                encoding="utf-8",
+            )
+
+            import wave as _wave
+            import io as _io
+            import struct as _struct
+
+            buf = _io.BytesIO()
+            with _wave.open(buf, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(22050)
+                w.writeframes(_struct.pack("<22050h", *([0] * 22050)))
+            wav_bytes = buf.getvalue()
+
+            vn.check_engine = lambda: (True, "0.0.0-test")
+            vn.synthesize = lambda text, speaker: wav_bytes
+            vn.concat_wavs_atomic = lambda wavs, out_path: (_ for _ in ()).throw(
+                PermissionError("simulated concat failure")
+            )
+
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["voicevox_narration.py"]
+            try:
+                ret = vn.main()
+            finally:
+                _sys.argv = old_argv
+
+            assert_eq(ret, 6, "concat failure → exit 6 (rollback path)")
+            if vn.NARRATION_READY_JSON.exists():
+                raise AssertionError(
+                    "sentinel must not exist after concat failure (all-or-nothing 破れ)"
+                )
+            # rollback: chunks も 削除されている
+            chunk_files = list(vn.NARRATION_DIR.glob("chunk_*.wav"))
+            if chunk_files:
+                raise AssertionError(
+                    f"rollback failed: chunks left after concat fail: {chunk_files}"
+                )
+    finally:
+        for k, v in state.items():
+            setattr(vn, k, v)
+        vn.concat_wavs_atomic = original_concat
+        vn.check_engine = original_check_engine
+        vn.synthesize = original_synthesize
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -1206,6 +1446,9 @@ def main() -> int:
         test_voicevox_collect_chunks_validation,
         test_voicevox_write_narration_data_alignment,
         test_voicevox_write_order_narrationdata_before_wav,
+        test_voicevox_cleanup_stale_unlinks_sentinel,
+        test_voicevox_sentinel_written_after_wav,
+        test_voicevox_sentinel_rollback_on_concat_fail,
         test_build_scripts_wiring,
         test_build_slide_data_main_e2e,
         test_build_slide_data_validates_bad_transcript,
