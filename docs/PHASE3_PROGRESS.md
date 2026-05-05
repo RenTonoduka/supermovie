@@ -137,9 +137,11 @@ main
 - supermovie-se 統合 (素材判断)
 - SadTalker / HeyGen / Kling 統合 (法的 / モラルリスク + API 課金)
 
-## 全 commit count (roku/phase3j-timeline branch、最新 65 件)
+## 全 commit count (roku/phase3j-timeline branch、最新 67 件)
 
 ```
+534287c docs: Codex post-freeze review 3 件 fix (P1 worktree / P2 v0 状態整合 / P3 PROGRESS test 数)
+a85bdb1 docs(phase3): PROGRESS auto-regen for v0 fill-in commit (drift 0)
 794e3bc docs(roadmap): 将来 feature 要件定義 v0 に Codex fill-in integrate (§4/§7 + §9 References)
 9b3c0ff docs(phase3): PROGRESS auto-regen for v0 roadmap commit (drift 0)
 eb55209 docs(roadmap): 将来 feature 要件定義 v0 起草 (動画教材 / アバター / YouTube / ショート)
@@ -207,7 +209,7 @@ e2a1a39 fix(timeline): Codex Phase 3-J review 4 件 fix (P1×1 + P2×2 + P3×1)
 66e2aeb feat(timeline): timeline.py 共通化 + Phase 3-I review 6 件 fix (Phase 3-J)
 ```
 
-(更新: 2026-05-05_09:53、source=HEAD、`scripts/regen_phase3_progress.sh` で auto-gen。
+(更新: 2026-05-05_09:58、source=HEAD、`scripts/regen_phase3_progress.sh` で auto-gen。
 本 script で regen → docs commit する形のため、docs 上の commit chain は
 docs commit を作る前の HEAD を反映する設計 (off-by-one は intrinsic、
 `--verify` mode で count drift を CI 検査可)。)
