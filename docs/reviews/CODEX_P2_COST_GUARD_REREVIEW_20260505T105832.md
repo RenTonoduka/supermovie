@@ -1,0 +1,9 @@
+P0: 指摘なし。
+
+P1: 指摘なし。前回 P1 は閉じています。API key 未設定 skip は env 解決前にあり、`not api_key and not args.dry_run` で `return 0` します（[generate_slide_plan.py](/Users/rokumasuda/.claude/plugins/supermovie/template/scripts/generate_slide_plan.py:168)）。`ANTHROPIC_API_KEY` unset + bad env でも exit 0 を実測しました（Bash 実測）。
+
+P2: 1 件。6 gate closure はまだ主張不可です。`check_release_ready.sh` は untracked file を exit 3 にする設計で（[check_release_ready.sh](/Users/rokumasuda/.claude/plugins/supermovie/scripts/check_release_ready.sh:57)）、現 worktree に `docs/reviews/CODEX_P2_COST_GUARD_REREVIEW_20260505T105832.md` が untracked かつ 0 byte で存在し、composite gate は exit 3 でした（Bash 実測）。`regen --verify` は docs 86 / git 87 / diff 1 で exit 0（Bash 実測）。
+
+P3: 指摘なし。前回 P2/P3 fix は閉じています。`_resolve_decimal` は `math.isfinite(v)` で nan/inf を拒否します（[generate_slide_plan.py](/Users/rokumasuda/.claude/plugins/supermovie/template/scripts/generate_slide_plan.py:136)）。`--rate-input nan` / `inf` と env nan は exit 4 を実測済み（Bash 実測）。`max-input-words` は design の `>=1`（[CODEX_P2_COST_GUARD_DESIGN_20260505T104428.md](/Users/rokumasuda/.claude/plugins/supermovie/docs/reviews/CODEX_P2_COST_GUARD_DESIGN_20260505T104428.md:9)）に合わせ、上限が `sys.maxsize` です（[generate_slide_plan.py](/Users/rokumasuda/.claude/plugins/supermovie/template/scripts/generate_slide_plan.py:186)）。
+
+Regression は追加済みです: skip bad env test（[test_timeline_integration.py](/Users/rokumasuda/.claude/plugins/supermovie/template/scripts/test_timeline_integration.py:1108)）、nan/inf test（[test_timeline_integration.py](/Users/rokumasuda/.claude/plugins/supermovie/template/scripts/test_timeline_integration.py:1148)）、runner 登録（[test_timeline_integration.py](/Users/rokumasuda/.claude/plugins/supermovie/template/scripts/test_timeline_integration.py:2357)）。Python 42/42 と React 22/22 は read-only sandbox の temp/cache EPERM で未証明、lint は exit 0 でした（Bash 実測）。
