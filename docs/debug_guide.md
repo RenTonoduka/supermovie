@@ -50,7 +50,7 @@ npm run lint   # eslint + tsc (静的検査)
 1. `<PROJECT>/src/テロップテンプレート/telopData.ts` が空でない (subtitles skill が回ったか)
 2. `<PROJECT>/src/Title/titleData.ts` が空でない
 3. `<PROJECT>/project-config.json` の `format` / `resolution` が正しい
-4. `GEMINI_API_KEY` env が設定済み (本 guard は `docs/api_operation_guard.md` 参照)
+4. `GEMINI_API_KEY` env が設定済み (cost guard / dry-run / status JSON 規約は別 PR で追加予定の API operation guard doc 参照、本 PR では env 存在のみ確認)
 5. 生成物 `<PROJECT>/public/images/generated/*.png` + `<PROJECT>/src/InsertImage/insertImageData.ts` の存在
 
 ## 4. 画像が表示されない (生成済みなのに preview に出ない)
@@ -66,7 +66,7 @@ npm run lint   # eslint + tsc (静的検査)
 1. `<PROJECT>/public/se/` に音源 file が存在
 2. `<PROJECT>/src/SoundEffects/seData.ts` の `seData[i].file` が `<PROJECT>/public/se/<file>` に実存
 3. Remotion `<SESequence>` は `staticFile("se/${se.file}")` で読む
-4. SE 素材の準備は `scripts/safe_rsync.sh` 経由 (`SUPERMOVIE_SE_SOURCE_DIR` env、CLAUDE.md `## project 同期` 参照)
+4. SE 素材の準備は `SUPERMOVIE_SE_SOURCE_DIR` env 経由が推奨 (safe rsync wrapper script は別 PR で追加予定、本 PR では env 概念のみ言及)
 
 ## 6. asset missing 全般
 
@@ -78,7 +78,7 @@ npm run lint   # eslint + tsc (静的検査)
 | 挿入画像 (手動) | `<PROJECT>/public/images/<file>.png` |
 | 挿入画像 (AI 生成) | `<PROJECT>/public/images/generated/<file>.png` |
 
-不在の場合: asset gate (Phase 3-F の `getStaticFiles()` fallback) で render は続行可能だが、preview / 最終 render 結果に影響。
+不在の場合: asset gate (Phase 3 release branch 側 prior art、main 未到達) で render は続行可能だが、preview / 最終 render 結果に影響。具体実装は Phase 3 release branch (上流 PR) 参照。
 
 ## 7. 症状 → 確認 path → 解決策
 
@@ -86,8 +86,8 @@ npm run lint   # eslint + tsc (静的検査)
 |---|---|---|
 | `GEMINI_API_KEY` 未設定 | env (存在のみ確認) | `export GEMINI_API_KEY=...` or 画像なしで続行 |
 | `telopData` 空 | `<PROJECT>/src/テロップテンプレート/telopData.ts` | `/supermovie-subtitles` 再実行 |
-| SE 素材不足 | `<PROJECT>/public/se/` + `seData.ts` の整合 | 素材追加 (`safe_rsync.sh` 経由) or `seData.ts` 修正 |
-| 画像 file 不在 | `<PROJECT>/public/images/generated/` | `/supermovie-image-gen` 再実行 (cost guard 通過後、`docs/api_operation_guard.md` 参照) |
+| SE 素材不足 | `<PROJECT>/public/se/` + `seData.ts` の整合 | 素材追加 (`SUPERMOVIE_SE_SOURCE_DIR` env 経由が推奨、safe rsync wrapper は別 PR 予定) or `seData.ts` 修正 |
+| 画像 file 不在 | `<PROJECT>/public/images/generated/` | `/supermovie-image-gen` 再実行 (cost guard 通過後、API operation guard doc は別 PR で追加予定) |
 | transcript 空 | `<PROJECT>/transcript.json` | `/supermovie-transcribe` 再実行 |
 | Studio 起動失敗 | `node_modules/.bin/remotion` 存在 | `npm install` 再実行 |
 
@@ -96,7 +96,7 @@ npm run lint   # eslint + tsc (静的検査)
 本 SuperMovie repo は **public_reference** (`RenTonoduka/supermovie`) の再現実装。**upstream author を debug 質問先 / サポート連絡先 / approver 扱いしない**。
 
 質問の解決経路:
-- Roku project memory (`~/.claude/projects/-Users-rokumasuda/memory/`)
+- Roku 自身の internal project memory store (本 doc に絶対 path は書かない、Roku machine 固有の場所)
 - Codex consult (本 repo の `docs/api_operation_guard.md` / `docs/debug_guide.md` 等の規約 doc)
 - 公式 Remotion docs (`https://www.remotion.dev/`)
 - 公式 Gemini API docs (`https://ai.google.dev/`)
