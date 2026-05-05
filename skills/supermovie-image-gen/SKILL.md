@@ -100,7 +100,7 @@ Senior visual content designer として、テロップの内容を分析し、
    → プロンプト案: "3ステップのフローチャート..."
 
 修正・追加・削除があれば教えてください。
-OKならこのまま生成します。
+**OK と言われても直接 Phase 3 に進まない**。次は §Phase 2-3 Cost Guard / Plan-only Gate に進み、plan-only summary を出してから guard pass + 明示承認 `yes` を取得する。
 ```
 
 **ユーザーが調整できるポイント:**
@@ -282,7 +282,7 @@ export const insertImageData: ImageSegment[] = [
 
 | チェック項目 | 条件 | 失敗時の対応 |
 |-------------|------|------------|
-| 画像ファイル存在 | 全ファイルが `public/images/generated/` にある | 再生成 |
+| 画像ファイル存在 | 全ファイルが `public/images/generated/` にある | §Phase 2-3 に戻り cost guard 再通過 (missing file の再生成も `planned_generation_count` に加算) + ユーザー明示承認 `yes` 取得後に再生成 |
 | フレーム重複 | 画像同士が重ならない | 前の画像のendFrameをカット |
 | テロップとの共存 | 画像表示中もテロップは読める | overlay時はテロップ位置を確認 |
 | 範囲超過 | endFrame ≤ TOTAL_FRAMES | カット |
