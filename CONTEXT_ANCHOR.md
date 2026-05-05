@@ -12,18 +12,18 @@
 
 ## Verified Snapshot (作成時点で Bash 実測、push/PR 前に再更新)
 
-| 項目 | 値 (Bash 実測 2026-05-05 13:03) |
+| 項目 | 値 (Bash 実測 2026-05-05 13:08) |
 |---|---|
-| HEAD (source commit) | `7e4b328` (anchor 自身の document commit はこの後ろに 1 件積まれる、§Source commit vs Document commit 規約 参照) |
-| branch | `roku/phase3j-timeline` |
-| main..HEAD | 128 commits |
-| roku/phase3i-transcript-alignment..HEAD | 110 commits |
-| origin remote | `https://github.com/RenTonoduka/supermovie.git` |
+| HEAD (source commit) | `f6e89ef` (anchor 自身の document commit はこの後ろに 1 件積まれる、§Source commit vs Document commit 規約 参照) |
+| branch | `roku/phase3j-timeline` (`fork/roku/phase3j-timeline` を track) |
+| main..HEAD | 129 commits |
+| roku/phase3i-transcript-alignment..HEAD | 111 commits |
+| origin remote | `https://github.com/RenTonoduka/supermovie.git` (READ only) |
 | origin viewerPermission | READ (Roku gh account `blessing1031r-dotcom` は write 権限なし) |
-| fork remote | 不在 (`git remote get-url fork` で error: No such remote、Step 6 で `gh repo fork` 後に `git remote add fork` 予定) |
+| fork remote | `https://github.com/blessing1031r-dotcom/supermovie.git` (Step 6 で `gh repo fork` + `git remote add fork` 完了、Draft PR #1 + #2 push 済) |
 | gh auth status | ✓ Logged in (account: blessing1031r-dotcom、scopes: gist read:org repo workflow、Claude Code 側 12:00 / 12:32 / 12:38 / 12:41 で 4 回 valid 確認。Codex `--ephemeral` sandbox 内では token 不可視 = invalid 表示されるが Claude Code 実行環境に影響なし) |
 | worktree | clean (cleanup commit `e0f5107` で `docs/reviews/**` 38 files + `docs/roadmap/FUTURE_FEATURES_REQUIREMENTS_v0.md` を release scope から外し済み、future doc は別 worktree `../supermovie-future-features-v0` の `roku/future-features-v0` branch `72a6ef4` に保全済) |
-| 6 gate composite | ALL PASS (head 1bc6bab → cleanup `e0f5107` で diff は docs only、composite gate 影響なし、Step 5 で再検証) |
+| 7 gate composite | ALL PASS at f6e89ef (env / worktree clean / regen drift 1 / 43/43 python smoke / lint exit 0 / React 22/22 / **gate 7 anchor drift = 1 intrinsic OK**、Bash 実測 13:04 + 13:08 再走行) |
 
 ## Roku Authorized Decisions (2026-05-05 user prompt 確定)
 

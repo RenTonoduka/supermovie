@@ -139,11 +139,14 @@ echo
 echo "--- anchor drift check ---"
 ANCHOR_FILE="$REPO_DIR/CONTEXT_ANCHOR.md"
 if [ ! -f "$ANCHOR_FILE" ]; then
-    echo "  [SKIP] CONTEXT_ANCHOR.md 不在"
+    echo "  [FAIL] CONTEXT_ANCHOR.md 不在 (anchor 自身が欠落 = §Codex Review Protocol で P1 扱い)"
+    exit 7
 else
     SOURCE_COMMIT=$(grep -m 1 '^| HEAD' "$ANCHOR_FILE" | sed -nE 's/.*`([a-f0-9]{7,})`.*/\1/p' | head -1)
     if [ -z "$SOURCE_COMMIT" ]; then
-        echo "  [SKIP] CONTEXT_ANCHOR.md HEAD 行から source commit を抽出できませんでした"
+        echo "  [FAIL] CONTEXT_ANCHOR.md HEAD 行から source commit を抽出できませんでした"
+        echo "         anchor の §Verified Snapshot table が破損 = anchor stale 扱い"
+        exit 7
     elif ! git rev-parse "$SOURCE_COMMIT" >/dev/null 2>&1; then
         echo "  [FAIL] anchor の source commit ($SOURCE_COMMIT) が git history に存在しません"
         echo "         CONTEXT_ANCHOR.md の HEAD を最新の release commit に refresh してください"

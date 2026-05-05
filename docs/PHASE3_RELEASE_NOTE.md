@@ -1,14 +1,14 @@
 # SuperMovie Phase 3 Release Note (2026-05-04 → 2026-05-05)
 
-`roku/phase3j-timeline` source commit HEAD: `7e4b328` (anchor 自身の document commit は drift 1 intrinsic、CONTEXT_ANCHOR.md §Source commit vs Document commit 規約 参照) (Codex CODEX_REVIEW_PHASE3V_FINAL 20260505T064250
+`roku/phase3j-timeline` source commit HEAD: `f6e89ef` (anchor 自身の document commit は drift 1 intrinsic、CONTEXT_ANCHOR.md §Source commit vs Document commit 規約 参照) (Codex CODEX_REVIEW_PHASE3V_FINAL 20260505T064250
 で「P0/P1/P2 なし、Phase 3-V production 品質で止めてよい」 verdict 後、post-freeze
 backlog 第 1〜3 弾 + P3 logging extension + Codex 4 cycle re-review (P5/2nd-batch/P2/P3-slide-plan
 全 P0/P1 NONE) を反映、Codex CODEX_FULL_SESSION_REVIEW 20260505T113913 で「過剰実装、
 P5 sentinel 以降は黄信号」と判定)
 
 Phase 3-A 〜 Phase 3-V の自走実装結果 + 後続 post-freeze backlog 第 1〜3 弾。本 note は
-Roku 不在モード中に Claude+Codex 協働で 110 commit (`roku/phase3i-transcript-alignment..HEAD`、
-main..HEAD は 128 commit、Bash 実測) を積んだ成果物の release assertion を固定する目的。
+Roku 不在モード中に Claude+Codex 協働で 111 commit (`roku/phase3i-transcript-alignment..HEAD`、
+main..HEAD は 129 commit、Bash 実測) を積んだ成果物の release assertion を固定する目的。
 
 ## Release-readiness statement (2026-05-05 時点、技術 readiness のみ)
 
@@ -25,7 +25,7 @@ main..HEAD は 128 commit、Bash 実測) を積んだ成果物の release assert
 Roku 判断領域 (release blocker 候補):
 - ★ PR / merge 戦略: phase3f→g→h→i→j は ancestry 連結済み、技術的に階層 merge
   不要。Codex 推奨は `roku/phase3j-timeline` を 1 PR / squash merge。`main..HEAD`
-  は 128 commits (Bash 実測)、PR diff は phase3i..HEAD の 110 commits より大きく見える点に注意。
+  は 129 commits (Bash 実測)、PR diff は phase3i..HEAD の 111 commits より大きく見える点に注意。
   upstream `RenTonoduka/supermovie` (Roku 所有でない、現 gh account `blessing1031r-dotcom`
   は READ only、Bash 実測) のため Codex 推奨は **Option A: fork → blessing1031r-dotcom →
   upstream PR** (CODEX_FULL_SESSION_REVIEW 20260505T113913 §推奨理由、release branch 外、commit history で参照可)。
@@ -72,7 +72,7 @@ Roku 判断領域 (release blocker 候補):
   - `--verify` mode: docs vs git log drift 検査 (CI guard、drift > 1 で exit 3)
   - `--source <SHA>`: HEAD ではなく指定 SHA まで
   - self-reference off-by-one を intrinsic 設計として明文化
-- `scripts/check_release_ready.sh`: 6 gate composite check
+- `scripts/check_release_ready.sh`: 7 gate composite check (env / worktree clean / regen verify / python smoke / lint / React test / **anchor drift**)
   (env / worktree clean / regen --verify / python smoke / lint / React test)
 
 ### 6. TS compile + React test 完封 (Phase 3-R/S/T/U/V)
@@ -141,7 +141,7 @@ Codex 第2弾 P2 (consult 先行必要) を独立 cycle として:
 | python smoke | 20/20 | **43/43** (Phase 3 23 + sentinel 4 + visual_smoke 4 + json-log 3 + cli mismatch 1 + P2 cost guard 5 + P2 review regression 2 + slide-plan json-log 1) |
 | React component test | 18/18 | **22/22** (旧 18 + sentinel trigger / null guard / dedup / coalescing 4) |
 | TypeScript lint | exit 0 (warn) | exit 0 (`no-explicit-any` error 化、any-free contract 機械 gate) |
-| 6 gate composite | ALL PASS | **ALL PASS** 維持 |
+| 7 gate composite | ALL PASS | **ALL PASS** 維持 (gate 7 anchor drift 追加、Codex 12:54 consult Step 3) |
 | Codex 4 step loop closure | 14 review | **+post-freeze 7 cycle**: P5 re-review / 第2弾 batch re-review / P2 re-review / P3 re-review すべて P0/P1 NONE |
 | docs/reviews/ artifact | 23 件 (Phase 3-V FINAL 時点) | **40+ 件累積** (cleanup commit `e0f5107` で release branch から外し済み、commit history で参照可、Roku 別 archive 候補) |
 
@@ -156,7 +156,7 @@ npm run lint                             # eslint 0 warning + tsc 0 error (`no-e
 npm run test                             # lint + test:timeline + test:react を一気に
 npm run visual-smoke                     # 実 main.mp4 + node_modules で 3 format
                                          # × 2 frame still + dimension regression 検査
-bash scripts/check_release_ready.sh      # 6 gate composite (上記 5 + 環境/worktree)
+bash scripts/check_release_ready.sh      # 7 gate composite (上記 5 + 環境/worktree + anchor drift)
 bash scripts/regen_phase3_progress.sh --verify  # docs drift 検査 (CI guard)
 ```
 
