@@ -1093,12 +1093,115 @@ def test_build_scripts_wiring() -> None:
     )
 
 
+def test_ms_to_playback_frame_edge_cases() -> None:
+    """ms_to_playback_frame の境界・degenerate ケース (Phase 3 post-freeze 補強)."""
+    cut_segs = [
+        {"originalStartMs": 0, "originalEndMs": 500, "playbackStart": 0, "playbackEnd": 15},
+        {"originalStartMs": 1500, "originalEndMs": 3000, "playbackStart": 15, "playbackEnd": 60},
+    ]
+    # 境界 inclusive: <= / >=
+    assert_eq(timeline.ms_to_playback_frame(0, 30, cut_segs), 0, "boundary seg0 originalStartMs")
+    assert_eq(timeline.ms_to_playback_frame(500, 30, cut_segs), 15, "boundary seg0 originalEndMs")
+    assert_eq(timeline.ms_to_playback_frame(3000, 30, cut_segs), 60, "boundary seg1 originalEndMs")
+
+    # cut 範囲外 (隙間 / 全体外)
+    assert_eq(timeline.ms_to_playback_frame(501, 30, cut_segs), None, "1ms after seg0 end (gap)")
+    assert_eq(timeline.ms_to_playback_frame(1499, 30, cut_segs), None, "1ms before seg1 start (gap)")
+    assert_eq(timeline.ms_to_playback_frame(3500, 30, cut_segs), None, "after all cuts")
+
+    # Single cut
+    single = [{"originalStartMs": 100, "originalEndMs": 600, "playbackStart": 0, "playbackEnd": 15}]
+    assert_eq(timeline.ms_to_playback_frame(100, 30, single), 0, "single cut at originalStart")
+    assert_eq(timeline.ms_to_playback_frame(50, 30, single), None, "single cut before range")
+    assert_eq(timeline.ms_to_playback_frame(700, 30, single), None, "single cut after range")
+
+    # fps boundary
+    assert_eq(timeline.ms_to_playback_frame(1000, 1, []), 1, "no-cut fps=1 1s")
+    assert_eq(timeline.ms_to_playback_frame(1000, 120, []), 120, "no-cut fps=120 1s")
+
+    # Adjacent cuts (gap=0): seg0 ends at 500, seg1 starts at 500.
+    # 仕様: for-loop が最初に matching 要素を返す。境界値で両方 match だが
+    # 累積 playback の連続性により同じ frame に着地する。
+    adjacent = [
+        {"originalStartMs": 0, "originalEndMs": 500, "playbackStart": 0, "playbackEnd": 15},
+        {"originalStartMs": 500, "originalEndMs": 1000, "playbackStart": 15, "playbackEnd": 30},
+    ]
+    assert_eq(
+        timeline.ms_to_playback_frame(500, 30, adjacent), 15,
+        "adjacent cuts boundary 500: seg0 first match, both yield 15",
+    )
+    assert_eq(
+        timeline.ms_to_playback_frame(600, 30, adjacent), 18,
+        "adjacent cuts: 600ms in seg1, offset=100ms, 15+round(3.0)=18",
+    )
+
+
+def test_load_cut_segments_edge_cases() -> None:
+    """load_cut_segments の corner case (空 / 単一 / 不在)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        # vad_result.json 不在 → []
+        assert_eq(timeline.load_cut_segments(proj, 30), [], "no vad file returns empty")
+
+        # 空 speech_segments → []
+        (proj / "vad_result.json").write_text(
+            json.dumps({"speech_segments": [], "duration_ms": 5000}),
+            encoding="utf-8",
+        )
+        result = timeline.load_cut_segments(proj, 30)
+        assert_eq(len(result), 0, "empty speech_segments → []")
+
+        # 単一 speech_segment → 1 要素 with playback frames
+        (proj / "vad_result.json").write_text(
+            json.dumps({
+                "speech_segments": [{"start": 200, "end": 1200}],
+                "duration_ms": 5000,
+            }),
+            encoding="utf-8",
+        )
+        result = timeline.load_cut_segments(proj, 30)
+        assert_eq(len(result), 1, "single speech_segment → 1 cut")
+        assert_eq(result[0]["originalStartMs"], 200, "single seg originalStartMs")
+        assert_eq(result[0]["originalEndMs"], 1200, "single seg originalEndMs")
+        assert_eq(result[0]["playbackStart"], 0, "single seg playbackStart=0")
+        assert_eq(result[0]["playbackEnd"], 30, "single seg playbackEnd=30 (1s @ 30fps)")
+
+
+def test_build_cut_segments_multi_with_gaps() -> None:
+    """build_cut_segments_from_vad で複数 speech segment + gap removal を検証."""
+    vad = {
+        "speech_segments": [
+            {"start": 0, "end": 1000},      # 1.0s
+            {"start": 2000, "end": 3500},   # 1.5s (gap 1000ms 除去)
+            {"start": 5000, "end": 6000},   # 1.0s
+        ],
+        "duration_ms": 7000,
+    }
+    cuts = timeline.build_cut_segments_from_vad(vad, 30)
+    assert_eq(len(cuts), 3, "3 segments expected")
+
+    # seg 0: original 0→1000、playback 0→30 (1s @ 30fps)
+    assert_eq(cuts[0]["playbackStart"], 0, "seg0 playbackStart")
+    assert_eq(cuts[0]["playbackEnd"], 30, "seg0 playbackEnd")
+
+    # seg 1: original 2000→3500、cumulative 1000→2500ms → playback 30→75
+    assert_eq(cuts[1]["playbackStart"], 30, "seg1 playbackStart (cumulative 1000ms = 30 frames)")
+    assert_eq(cuts[1]["playbackEnd"], 75, "seg1 playbackEnd (cumulative 2500ms = 75 frames)")
+
+    # seg 2: original 5000→6000、cumulative 2500→3500ms → playback 75→105
+    assert_eq(cuts[2]["playbackStart"], 75, "seg2 playbackStart (cumulative 2500ms = 75 frames)")
+    assert_eq(cuts[2]["playbackEnd"], 105, "seg2 playbackEnd (cumulative 3500ms = 105 frames)")
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
         test_vad_schema_validation,
         test_ms_to_playback_frame,
+        test_ms_to_playback_frame_edge_cases,
         test_load_cut_segments_fail_fast,
+        test_load_cut_segments_edge_cases,
+        test_build_cut_segments_multi_with_gaps,
         test_transcript_segment_validation,
         test_voicevox_collect_chunks_validation,
         test_voicevox_write_narration_data_alignment,
