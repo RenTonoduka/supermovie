@@ -12,18 +12,18 @@
 
 ## Verified Snapshot (作成時点で Bash 実測、push/PR 前に再更新)
 
-| 項目 | 値 (Bash 実測 2026-05-05 11:55) |
+| 項目 | 値 (Bash 実測 2026-05-05 12:08) |
 |---|---|
-| HEAD | `1bc6bab` |
+| HEAD | `e0f5107` |
 | branch | `roku/phase3j-timeline` |
-| main..HEAD | 117 commits |
-| roku/phase3i-transcript-alignment..HEAD | 99 commits |
+| main..HEAD | 119 commits |
+| roku/phase3i-transcript-alignment..HEAD | 101 commits |
 | origin remote | `https://github.com/RenTonoduka/supermovie.git` |
 | origin viewerPermission | READ (Roku gh account `blessing1031r-dotcom` は write 権限なし) |
-| fork remote | 不在 (`git remote get-url fork` で error: No such remote) |
+| fork remote | 不在 (`git remote get-url fork` で error: No such remote、Step 6 で `gh repo fork` 後に `git remote add fork` 予定) |
 | gh auth status | ✓ Logged in (account: blessing1031r-dotcom、scopes: gist read:org repo workflow) |
-| worktree | 1 untracked (`docs/reviews/CODEX_NEXT_STEP_INSTRUCTION_20260505T114718.md`、本 commit cycle で除外予定) |
-| 6 gate composite | ALL PASS (head 1bc6bab) |
+| worktree | clean (cleanup commit `e0f5107` で `docs/reviews/**` 38 files + `docs/roadmap/FUTURE_FEATURES_REQUIREMENTS_v0.md` を release scope から外し済み、future doc は別 worktree `../supermovie-future-features-v0` の `roku/future-features-v0` branch `72a6ef4` に保全済) |
+| 6 gate composite | ALL PASS (head 1bc6bab → cleanup `e0f5107` で diff は docs only、composite gate 影響なし、Step 5 で再検証) |
 
 ## Roku Authorized Decisions (2026-05-05 user prompt 確定)
 
