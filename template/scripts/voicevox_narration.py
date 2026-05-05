@@ -525,19 +525,30 @@ def main():
                          "(downstream observability、既存 stdout は維持)")
     args = ap.parse_args()
 
+    # Phase 3-V P3 review fix (Codex CODEX_2ND_BATCH_REVIEW P1):
+    # 全 return path に status / exit_code 付き JSON を emit する helper。
+    # success path だけでなく engine skip / require_engine fail / cleanup fail / VAD invalid /
+    # concat fail / sentinel fail / collect_chunks fail / list_speakers / usage error も
+    # 全て observability 経路を通すため、return 直前に必ず呼ぶ規約。
+    def emit_json(status: str, exit_code: int, **extra) -> int:
+        if args.json_log:
+            payload = {"status": status, "exit_code": exit_code, **extra}
+            print(json.dumps(payload, ensure_ascii=False))
+        return exit_code
+
     ok, info = check_engine()
     if not ok:
         msg = f"VOICEVOX engine unavailable at {ENGINE_BASE}: {info}"
         if args.require_engine:
             print(f"ERROR: {msg}", file=sys.stderr)
-            return 4
+            return emit_json("engine_unavailable_strict", 4, info=info)
         print(f"INFO: {msg} -> narration generation skipped")
         print(
             "      Remotion 側の <NarrationAudio /> は public/narration.wav 不在 + "
             "narrationData.ts 空を asset gate で検出し null を返すため render は失敗しない "
             "(Phase 3-F asset gate + Phase 3-H per-segment Sequence)"
         )
-        return 0
+        return emit_json("engine_skipped", 0, info=info)
     print(f"VOICEVOX engine OK (version: {info})")
 
     if args.list_speakers:
@@ -545,27 +556,27 @@ def main():
         for s in speakers:
             for style in s.get("styles", []):
                 print(f"  [{style.get('id'):3}] {s.get('name')} / {style.get('name')}")
-        return 0
+        return emit_json("list_speakers", 0)
 
     transcript_path = PROJ / "transcript_fixed.json"
     if not transcript_path.exists() and not (args.script or args.script_json):
         print(f"ERROR: transcript_fixed.json missing under {PROJ}", file=sys.stderr)
-        return 3
+        return emit_json("transcript_missing", 3)
     transcript = load_json(transcript_path) if transcript_path.exists() else {}
     try:
         chunks = collect_chunks(args, transcript)
     except TranscriptSegmentError as e:
         # Codex Phase 3-I review P2 #3: 壊れた transcript で TTS を回さない
         print(f"ERROR: transcript validation failed: {e}", file=sys.stderr)
-        return 3
+        return emit_json("transcript_invalid", 3, error=str(e))
     if not chunks:
         print("ERROR: no narration chunks", file=sys.stderr)
-        return 3
+        return emit_json("no_chunks", 3)
 
     fps = args.fps if args.fps is not None else read_video_config_fps(PROJ)
     if fps <= 0:
         print(f"ERROR: invalid fps={fps} (--fps is positive integer required)", file=sys.stderr)
-        return 4
+        return emit_json("invalid_fps", 4, fps=fps)
     print(f"target fps: {fps}")
 
     # Phase 3-H: stale narration を全 reset BEFORE synthesis
@@ -574,7 +585,7 @@ def main():
         cleanup_stale_all()
     except StaleCleanupError as e:
         print(f"ERROR: {e}", file=sys.stderr)
-        return 7
+        return emit_json("stale_cleanup_fail", 7, error=str(e))
 
     # Codex Phase 3-J review P1 反映: VAD validation を synthesis 前 (cleanup 直後)
     # に移動。VAD 破損時に synthesize / concat / narrationData 全 skip し、
@@ -594,7 +605,7 @@ def main():
         )
         # cleanup_stale_all() 直後で narrationData.ts は空 array、その他成果物
         # (chunk wav / narration.wav / chunk_meta.json) は未生成、mkdir も未実行。
-        return 8
+        return emit_json("vad_invalid", 8, error=str(e))
     NARRATION_DIR.mkdir(parents=True, exist_ok=True)
     if cut_segments:
         print(f"cut-aware mapping: {len(cut_segments)} cut segments loaded from vad_result.json")
@@ -616,7 +627,7 @@ def main():
 
     if not chunk_paths:
         print("ERROR: no chunks succeeded", file=sys.stderr)
-        return 5
+        return emit_json("no_chunks_succeeded", 5, total=len(chunks))
     if not args.allow_partial and len(chunk_paths) < len(chunks):
         print(
             f"ERROR: only {len(chunk_paths)}/{len(chunks)} chunks succeeded "
@@ -630,7 +641,10 @@ def main():
                 p.unlink()
             except OSError:
                 pass
-        return 6
+        return emit_json(
+            "partial_chunks_disallowed", 6,
+            succeeded=len(chunk_paths), total=len(chunks),
+        )
 
     # Codex Phase 3-N review P2 #1 反映: write 順序を chunks → narrationData.ts →
     # narration.wav に変更。
@@ -660,7 +674,10 @@ def main():
                 p.unlink()
             except OSError:
                 pass
-        return 6
+        return emit_json(
+            "write_narration_data_wave_error", 6,
+            error=f"{type(e).__name__}: {e}",
+        )
     total_frames = max(
         (s["startFrame"] + s["durationInFrames"] for s in segments), default=0
     )
@@ -695,7 +712,11 @@ def main():
                 CHUNK_META_JSON.unlink()
             except OSError:
                 pass
-        return 6
+        return emit_json(
+            "concat_fail", 6,
+            error=f"{type(e).__name__}: {e}",
+            out_path=str(out_path),
+        )
     print(f"\nwrote: {out_path} ({out_path.stat().st_size} bytes)")
     print(f"chunks succeeded: {len(chunk_paths)} / {len(chunks)} synthesized")
 
@@ -737,7 +758,11 @@ def main():
                 NARRATION_READY_JSON.unlink()
             except OSError:
                 pass
-        return 6
+        return emit_json(
+            "sentinel_write_fail", 6,
+            error=f"{type(e).__name__}: {e}",
+            out_path=str(out_path),
+        )
     print(f"wrote: {NARRATION_READY_JSON} (publish 完了 signal sentinel)")
 
     summary = {
@@ -757,11 +782,10 @@ def main():
         "engine_version": info,
     }
     print(f"\nsummary: {json.dumps(summary, ensure_ascii=False)}")
-    # Phase 3-V P3 (CODEX_NEXT_PRIORITY:15-18): --json-log で末尾に純 JSON 1 行
-    # (downstream tool が tail 1 行 parse 可、既存 "summary: {...}" 行は維持)
-    if args.json_log:
-        print(json.dumps(summary, ensure_ascii=False))
-    return 0
+    # Phase 3-V P3 review fix (Codex CODEX_2ND_BATCH_REVIEW P1): success path も
+    # emit_json 経由で status / exit_code を含む形に統一 (全 return path で
+    # 同一 schema、downstream tool が status field で分岐可能)。
+    return emit_json("success", 0, **summary)
 
 
 if __name__ == "__main__":

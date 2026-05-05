@@ -1641,6 +1641,178 @@ def test_voicevox_json_log_emits_pure_json() -> None:
         vn.synthesize = original_synthesize
 
 
+def test_voicevox_json_log_engine_skip_path() -> None:
+    """Phase 3-V P3 review P1 fix (CODEX_2ND_BATCH_REVIEW:5):
+    engine unavailable の skip path も --json-log emit する."""
+    import voicevox_narration as vn
+    import io as _io
+    import contextlib
+
+    state = {"PROJ": vn.PROJ}
+    original_check_engine = vn.check_engine
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp)
+            vn.PROJ = proj
+            # Force engine unavailable, --require-engine 無し → skip 経路
+            vn.check_engine = lambda: (False, "connection refused")
+
+            captured = _io.StringIO()
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["voicevox_narration.py", "--json-log"]
+            try:
+                with contextlib.redirect_stdout(captured):
+                    ret = vn.main()
+            finally:
+                _sys.argv = old_argv
+
+            assert_eq(ret, 0, "engine skip exit 0")
+            stdout = captured.getvalue()
+            lines = [ln for ln in stdout.splitlines() if ln.strip()]
+            if not lines:
+                raise AssertionError("--json-log produced no stdout for skip path")
+            last = lines[-1]
+            try:
+                payload = json.loads(last)
+            except json.JSONDecodeError as e:
+                raise AssertionError(
+                    f"--json-log skip path last line not pure JSON: {last!r} ({e})"
+                ) from e
+            assert_eq(payload.get("status"), "engine_skipped", "skip status field")
+            assert_eq(payload.get("exit_code"), 0, "skip exit_code field")
+            if "info" not in payload:
+                raise AssertionError(
+                    f"engine skip JSON missing 'info' field: {payload}"
+                )
+    finally:
+        for k, v in state.items():
+            setattr(vn, k, v)
+        vn.check_engine = original_check_engine
+
+
+def test_voicevox_json_log_engine_strict_path() -> None:
+    """P3 review P1 fix: --require-engine + engine 不在 → exit 4 + status json."""
+    import voicevox_narration as vn
+    import io as _io
+    import contextlib
+
+    state = {"PROJ": vn.PROJ}
+    original_check_engine = vn.check_engine
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp)
+            vn.PROJ = proj
+            vn.check_engine = lambda: (False, "connection refused")
+
+            captured = _io.StringIO()
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = ["voicevox_narration.py", "--json-log", "--require-engine"]
+            try:
+                with contextlib.redirect_stdout(captured):
+                    ret = vn.main()
+            finally:
+                _sys.argv = old_argv
+
+            assert_eq(ret, 4, "engine strict fail exit 4")
+            lines = [ln for ln in captured.getvalue().splitlines() if ln.strip()]
+            payload = json.loads(lines[-1])
+            assert_eq(
+                payload.get("status"), "engine_unavailable_strict",
+                "strict status field",
+            )
+            assert_eq(payload.get("exit_code"), 4, "strict exit_code field")
+    finally:
+        for k, v in state.items():
+            setattr(vn, k, v)
+        vn.check_engine = original_check_engine
+
+
+def test_visual_smoke_cli_mismatch_and_restore() -> None:
+    """Phase 3-V P4 review P2 fix (CODEX_2ND_BATCH_REVIEW:9):
+    cli() の finally restore + mismatched/exit 2 を mock-only で verify."""
+    import visual_smoke as vs
+    import shutil as _shutil
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = Path(tmp)
+        (proj / "src").mkdir()
+        original_content = (
+            "export const FORMAT: VideoFormat = 'youtube';\n"
+            "export const FPS = 30;\n"
+        )
+        config_path = proj / "src" / "videoConfig.ts"
+        config_path.write_text(original_content, encoding="utf-8")
+        main_video = proj / "public" / "main.mp4"
+        main_video.parent.mkdir()
+        main_video.touch()
+        remotion_bin = proj / "node_modules" / ".bin" / "remotion"
+        remotion_bin.parent.mkdir(parents=True)
+        remotion_bin.touch()
+        out_dir = proj / "out" / "visual_smoke"
+
+        def fake_render(project, frame, png_out):
+            png_out.parent.mkdir(parents=True, exist_ok=True)
+            png_out.write_bytes(b"fake-png")
+
+        # backup originals
+        bak = {
+            "PROJ": vs.PROJ,
+            "VIDEO_CONFIG": vs.VIDEO_CONFIG,
+            "MAIN_VIDEO": vs.MAIN_VIDEO,
+            "REMOTION_BIN": vs.REMOTION_BIN,
+            "render_still": vs.render_still,
+            "probe_dim": vs.probe_dim,
+            "has_drawtext_filter": vs.has_drawtext_filter,
+        }
+        original_which = _shutil.which
+        try:
+            vs.PROJ = proj
+            vs.VIDEO_CONFIG = config_path
+            vs.MAIN_VIDEO = main_video
+            vs.REMOTION_BIN = remotion_bin
+            vs.render_still = fake_render
+            # mismatch を強制 (期待 1920x1080、actual 1000x1000)
+            vs.probe_dim = lambda png: (1000, 1000)
+            vs.has_drawtext_filter = lambda: False
+            _shutil.which = lambda cmd: "/usr/bin/" + cmd
+
+            import sys as _sys
+            old_argv = _sys.argv
+            _sys.argv = [
+                "visual_smoke.py",
+                "--formats", "youtube",
+                "--frames", "30",
+                "--no-grid",
+                "--out-dir", str(out_dir),
+            ]
+            try:
+                ret = vs.cli()
+            finally:
+                _sys.argv = old_argv
+
+            assert_eq(ret, 2, "mismatch detected → cli exit 2")
+            restored = config_path.read_text(encoding="utf-8")
+            if restored != original_content:
+                raise AssertionError(
+                    f"finally restore failed: expected {original_content!r}, got {restored!r}"
+                )
+            # summary.json も書かれている
+            summary_path = out_dir / "summary.json"
+            if not summary_path.exists():
+                raise AssertionError("summary.json not written")
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            assert_eq(summary.get("mismatched"), 1, "summary mismatched=1")
+            assert_eq(summary.get("total"), 1, "summary total=1")
+        finally:
+            for k, v in bak.items():
+                setattr(vs, k, v)
+            _shutil.which = original_which
+
+
 def test_visual_smoke_patch_format_youtube_to_short() -> None:
     """Phase 3-V post-freeze 第2弾 P4 (Codex CODEX_NEXT_PRIORITY:21-23):
     visual_smoke.patch_format が videoConfig.ts の FORMAT 行を正しく書き換える."""
@@ -1729,6 +1901,9 @@ def main() -> int:
         test_voicevox_sentinel_write_fail_rollback,
         test_voicevox_sentinel_rollback_on_concat_fail,
         test_voicevox_json_log_emits_pure_json,
+        test_voicevox_json_log_engine_skip_path,
+        test_voicevox_json_log_engine_strict_path,
+        test_visual_smoke_cli_mismatch_and_restore,
         test_visual_smoke_patch_format_youtube_to_short,
         test_visual_smoke_patch_format_no_match_raises,
         test_visual_smoke_patch_format_round_trip,

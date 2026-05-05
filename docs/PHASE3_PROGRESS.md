@@ -234,8 +234,8 @@ npm run test:timeline  # pure python integration smoke 単独 (engine 不要、C
 npm run visual-smoke   # 実 main.mp4 + node_modules 必要、3 format × 2 frame still
 ```
 
-`test:timeline` は **23 test ケース** (Phase 3-A〜3-V + post-freeze edge case +3 件 累積、最新
-996649f 時点) で timeline.py / 4 script の連鎖を engine 不要で高速検証 (新規 commit 後の
-regression 早期検出用)。post-freeze 拡張 3 件 = `test_ms_to_playback_frame_edge_cases` /
-`test_load_cut_segments_edge_cases` / `test_build_cut_segments_multi_with_gaps`。test 一覧は
+`test:timeline` は **35 test ケース** (Phase 3-A〜3-V 23 + post-freeze 第1弾 voicevox sentinel
++4 件 + 第2弾 visual_smoke +4 + json-log success/skip/strict 3 + cli mismatch+restore 1 累積、
+最新 第2弾 P3/P4 review fix 反映時点) で timeline.py / 4 script + visual_smoke の連鎖を
+engine 不要で高速検証 (新規 commit 後の regression 早期検出用)。test 一覧は
 `scripts/test_timeline_integration.py` の `main()` 末尾参照。
