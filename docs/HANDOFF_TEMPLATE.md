@@ -89,24 +89,20 @@
 
 main..HEAD = {{MAIN_HEAD_COUNT}} commits、本セッション分は {{SESSION_COMMITS}} commits ({{COMMIT_RANGE}})。
 
-主要新規 / 拡張 file:
+主要新規 / 拡張 file (`{{PRIMARY_CHANGED_DIRS}}` の例):
 
 ```
-template/scripts/                   [新規 / 拡張 list]
-├── (file 1)                        [新規]
-├── (file 2)                        [拡張]
+{{PRIMARY_CHANGED_DIRS}}            [Phase 固有の主要 dir、例: template/scripts/, template/src/, apps/web/, src/]
+├── (file 1)                        [新規 / 拡張]
+├── (file 2)                        [新規 / 拡張]
 └── ...
 
-template/src/{{Module}}/
-├── (file 1)                        [新規]
-└── (file 2)                        [拡張]
-
 docs/                               [PROGRESS / RELEASE_NOTE 等]
-├── PHASE{{N}}_PROGRESS.md          [auto-gen]
+├── PHASE{{N}}_PROGRESS.md          [auto-gen by scripts/regen_phase{{N}}_progress.sh]
 └── PHASE{{N}}_RELEASE_NOTE.md      [release assertion]
 
-CONTEXT_ANCHOR.md                   [Verified Snapshot / Roku Authorized / Release Scope]
-scripts/                            [check_release_ready.sh / regen_phase{{N}}_progress.sh]
+CONTEXT_ANCHOR.md                   [Verified Snapshot / Roku Authorized / Release Scope / 7 gate / Source vs Document commit 規約]
+scripts/                            [{{RELEASE_GATE_SCRIPT}} / {{REGEN_SCRIPT}}、例: check_release_ready.sh / regen_phase{{N}}_progress.sh]
 ```
 
 ## Next Session Should

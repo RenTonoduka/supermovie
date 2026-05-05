@@ -23,13 +23,13 @@
 | origin remote | `{{ORIGIN_REMOTE}}` |
 | origin viewerPermission | {{ORIGIN_PERMISSION}} (Roku gh account `{{GH_ACCOUNT}}` の権限) |
 | fork remote | `{{FORK_REMOTE}}` (Step 6 で `gh repo fork` + `git remote add fork` 完了済) |
-| gh auth status | ✓ Logged in (account: `{{GH_ACCOUNT}}`、scopes: `{{SCOPES}}`、Claude Code 側 N 回 valid 確認、Codex `--ephemeral` sandbox 内では token 不可視 = invalid 表示されるが Claude Code 実行環境に影響なし) |
+| gh auth status | ✓ Logged in (account: `{{GH_ACCOUNT}}`、scopes: `{{SCOPES}}`、Claude Code 側 {{AUTH_CHECK_COUNT}} 回 valid 確認、Codex `--ephemeral` sandbox 内では token 不可視 = invalid 表示されるが Claude Code 実行環境に影響なし) |
 | worktree | clean (or 不在 file の理由を明記) |
 | 7 gate composite | ALL PASS at `{{HEAD}}` (env / worktree clean / regen drift 1 / python smoke / lint / React tests / **gate 7 anchor drift = 1 intrinsic OK**、Bash 実測 {{TIMESTAMP}}) |
 
 ## Roku Authorized Decisions ({{DATE}} user prompt 確定)
 
-Roku 「{{AUTHORIZATION_QUOTE}}」で以下 N 項目の Codex 推奨を一括採用:
+Roku 「{{AUTHORIZATION_QUOTE}}」で以下 {{AUTHORIZED_DECISION_COUNT}} 項目の Codex 推奨を一括採用:
 
 | # | 項目 | Codex 推奨 (採用済み) |
 |---|---|---|
@@ -53,39 +53,38 @@ Roku 「{{AUTHORIZATION_QUOTE}}」で以下 N 項目の Codex 推奨を一括採
 
 `origin/main` 側に上記 exclude path が存在しないため、`git rm` で release branch から削除すれば final diff から消える。
 
-## Required Gates (Draft PR 開始は composite gate のみで可、merge 前に Roku machine で visual-smoke / render 実行必須)
+## Required Gates (Draft PR 開始は composite gate のみで可、merge 前に Roku machine で実 e2e 実行必須)
 
-```bash
-# 1. self-driveable composite gate (Draft PR 開始 OK、Claude 自走可)
-bash scripts/check_release_ready.sh                 # ALL PASS 必須
+| 区分 | command | 実行環境 | merge blocker か |
+|---|---|---|---|
+| 1. composite gate (Draft PR 開始 OK) | `{{COMPOSITE_GATE_CMD}}` (例: `bash scripts/check_release_ready.sh`) | Claude 自走 OK、ALL PASS 必須 | yes (gate 不通過なら Draft PR 開始も停止) |
+| 2. 実 project e2e (merge blocker) | `{{E2E_COMMANDS}}` (例: `cd template && npm run test:visual-smoke && npm run render`) | Roku 環境必要、`{{FIXTURE_NAME}}` fixture | **yes** (merge 前必須) |
+| 3. final worktree clean | `git status --short` | Claude 自走 OK、空必須 | yes |
+| 4. (option) `{{ADDITIONAL_GATES}}` | (例: 課金 API smoke、segment-level e2e) | (環境次第) | (Roku 判断) |
 
-# 2. 実 project e2e (merge 前必須、Roku 環境必要、{{FIXTURE_NAME}} fixture)
-cd template
-npm run test:visual-smoke                           # 例: 3 format × 2 frame still + dimension regression
-npm run render                                       # 例: 実 render 1 周
+composite gate に含まれる sub-gate (`{{COMPOSITE_SUBGATES}}` の例): env / worktree clean / docs drift / unit smoke / lint / type test / **anchor drift (gate 7)**。
+e2e は composite script の対象外、Roku 環境で fixture を持つ実 project から実行 (`{{E2E_REASON}}`、例: 実動画 fixture 必要 / 課金 / 専用環境必要)。
 
-# 3. final worktree clean check
-git status --short                                   # 空必須
-```
+## External Actions (権限分類、authorization evidence ベース、safe-by-default)
 
-`visual-smoke` / `render` は composite script の対象外、Roku 環境で fixture を持つ実 project から実行。
+> **重要**: default 実行者が `Roku 判断` の action は、`{{AUTHORIZATION_QUOTE}}` (Roku 直接発話、§Roku Authorized Decisions に記録) が無い限り Claude 自走不可。template instantiate 直後はまだ授権ゼロなので、新規 phase 開始時はすべて `Roku 判断` で残し、Roku が「{{AUTHORIZATION_QUOTE}} (例: 「OK、推奨から進めて」「fork して」)」と明示した後にのみ Claude 自走可へ昇格。
 
-## External Actions (権限分類)
-
-| action | 実行者 | 理由 |
-|---|---|---|
-| `gh repo fork {{UPSTREAM_OWNER}}/{{UPSTREAM_NAME}} --clone=false` | **Claude 自走可** (Roku 授権済) | 自 account への fork、外部副作用なし |
-| `git remote add fork {{FORK_REMOTE}}` | Claude 自走可 | local 設定 |
-| `git push -u fork {{BRANCH}}` | Claude 自走可 (auth scope `repo` あり) | 自 account への push |
-| `gh pr create --repo {{UPSTREAM_OWNER}}/{{UPSTREAM_NAME}} --head {{GH_ACCOUNT}}:{{BRANCH}} --base main --draft --title <X> --body-file <Y>` | Claude 自走可 | fork PR 作成 (upstream maintainer = `{{UPSTREAM_OWNER}}` が review) |
-| PR review / merge | **Roku 判断 + `{{UPSTREAM_OWNER}}` 操作必要** | upstream maintainer 権限、destructive action |
-| `git push --force` (any branch) | **Roku 明示授権必要** | history rewrite、destructive |
-| remote branch delete (`git push fork :branch`) | **Roku 明示授権必要** | destructive |
-| PR close / reopen | **Roku 判断** | upstream PR の段取り |
-| repo archive 作成 (raw review artifact 別保管用) | **Roku 判断** | 外部 repo 作成、段取り |
-| GitHub re-auth (`gh auth login`) | **Roku 操作必要** (interactive) | Claude bash 経由不可 |
-| rollback (`git revert <sha>`) | Claude 自走可 | local 操作 |
-| force push rollback | **Roku 明示授権必要** | destructive |
+| action | 副作用 | default 実行者 | Claude 自走可 となる条件 |
+|---|---|---|---|
+| `gh repo fork {{UPSTREAM_OWNER}}/{{UPSTREAM_NAME}} --clone=false` | external service mutation: 自 account に fork repo 新規作成 | **Roku 判断** | Roku 「{{AUTHORIZATION_QUOTE}}」明示授権 + §Roku Authorized Decisions に記録済 |
+| `git remote add fork {{FORK_REMOTE}}` | local 設定のみ (副作用なし) | Claude 自走可 | (常時 OK) |
+| `git push -u fork {{BRANCH}}` | external service mutation: 自 account の fork repo に branch + commit 反映、commit history が公開可能になる | **Roku 判断** | 上記 fork 授権が継続有効、auth scope `repo` ある状態、PR 作成前段の準備として明示理解 |
+| `gh pr create --repo {{UPSTREAM_OWNER}}/{{UPSTREAM_NAME}} --head {{GH_ACCOUNT}}:{{BRANCH}} --base main --draft --title <X> --body-file <Y>` | external service mutation: upstream repo に Draft PR (maintainer に通知、公開) | **Roku 判断** | Roku 「PR 作成 OK」明示授権、PR title / body 内容を Roku 確認後 (Draft なので merge は別 action) |
+| `gh pr create --repo ... --base main` (non-Draft) | external: PR 公開 + merge-ready 主張 | **Roku 明示授権必要** | Draft PR と区別、merge-ready 状態 (gate 7 ALL PASS + e2e 完了) 確認後のみ |
+| PR review / merge | external service mutation: upstream main 変更 (squash / merge / rebase いずれも history 改変) | **Roku 判断 + `{{UPSTREAM_OWNER}}` 操作必要** | upstream maintainer 権限、Claude が直接実行不可 |
+| `git push --force` (any branch) | destructive: 既存 history rewrite | **Roku 明示授権必要** | 通常回避、必要時 Roku 「force push OK」明示授権 |
+| remote branch delete (`git push fork :branch`) | destructive: branch 喪失 | **Roku 明示授権必要** | 通常回避 |
+| PR close / reopen / コメント編集 | external: PR state / public comment 変更 | **Roku 判断** | upstream PR の段取り、Roku 確認後 |
+| repo archive 作成 (raw artifact 別保管用) | external: 新 repo 作成 | **Roku 判断** | 外部 repo 作成、段取り |
+| GitHub re-auth (`gh auth login`) | local interactive (Roku の terminal 操作必要) | **Roku 操作必要** | Claude bash 経由不可 |
+| rollback (`git revert <sha>`) | local commit 追加 (副作用なし) | Claude 自走可 | (常時 OK、ただし push は別 action) |
+| force push rollback | destructive: history rewrite | **Roku 明示授権必要** | 通常回避 |
+| Codex consult / review (read-only) | external: API call (課金、Anthropic / OpenAI) | Claude 自走可 | (常時 OK、ただし大量実行は cost 監視) |
 
 ## Codex Review Protocol
 
