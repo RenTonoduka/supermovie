@@ -12,18 +12,18 @@
 
 ## Verified Snapshot (作成時点で Bash 実測、push/PR 前に再更新)
 
-| 項目 | 値 (Bash 実測 2026-05-05 19:59) |
+| 項目 | 値 (Bash 実測 2026-05-05 20:12) |
 |---|---|
-| HEAD (source commit) | `61bf8b5` (anchor 自身の document commit はこの後ろに 1 件積まれる、§Source commit vs Document commit 規約 参照) |
-| branch | `roku/observability-doc` (Tech 改善 Medium #3、`docs/OBSERVABILITY.md` 起草、`roku/phase3j-timeline` ベース) |
-| main..HEAD | 132 commits |
-| roku/phase3i-transcript-alignment..HEAD | 114 commits |
+| HEAD (source commit) | `64bce34` (anchor 自身の document commit はこの後ろに 1 件積まれる、§Source commit vs Document commit 規約 参照) |
+| branch | `roku/observability-doc` (Tech 改善 Medium #3、`docs/OBSERVABILITY.md` 起草 + Codex 20:08 review fix iter、`roku/phase3j-timeline` ベース) |
+| main..HEAD | 134 commits |
+| roku/phase3i-transcript-alignment..HEAD | 116 commits |
 | origin remote | `https://github.com/RenTonoduka/supermovie.git` (READ only) |
 | origin viewerPermission | READ (Roku gh account `blessing1031r-dotcom` は write 権限なし) |
 | fork remote | `https://github.com/blessing1031r-dotcom/supermovie.git` (Step 6 で `gh repo fork` + `git remote add fork` 完了、Draft PR #1 + #2 push 済) |
 | gh auth status | ✓ Logged in (account: blessing1031r-dotcom、scopes: gist read:org repo workflow、Claude Code 側 12:00 / 12:32 / 12:38 / 12:41 で 4 回 valid 確認。Codex `--ephemeral` sandbox 内では token 不可視 = invalid 表示されるが Claude Code 実行環境に影響なし) |
 | worktree | clean (cleanup commit `e0f5107` で `docs/reviews/**` 38 files + `docs/roadmap/FUTURE_FEATURES_REQUIREMENTS_v0.md` を release scope から外し済み、future doc は別 worktree `../supermovie-future-features-v0` の `roku/future-features-v0` branch `72a6ef4` に保全済) |
-| 7 gate composite | ALL PASS at 61bf8b5 (env / worktree clean / regen drift 1 / 43/43 python smoke / lint exit 0 / React 22/22 / **gate 7 anchor drift = 1 intrinsic OK**、Bash 実測 19:59 再走行予定) |
+| 7 gate composite | ALL PASS at 64bce34 (env / worktree clean / regen drift 1 / 43/43 python smoke / lint exit 0 / React 22/22 / **gate 7 anchor drift = 1 intrinsic OK**、Bash 実測 20:12 再走行予定) |
 
 ## Roku Authorized Decisions (2026-05-05 user prompt 確定)
 
