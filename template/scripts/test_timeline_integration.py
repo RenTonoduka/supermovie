@@ -1164,6 +1164,43 @@ def test_generate_slide_plan_json_log_status_path() -> None:
                 assert_eq(payload.get("exit_code"), 0, "success exit_code")
                 if "slides" not in payload:
                     raise AssertionError(f"missing slides in success JSON: {payload}")
+                # Phase 3-V P3 review fix (CODEX_P3_SLIDE_PLAN_REVIEW P3): 既存 human
+                # stdout (wrote: / slides:) も維持されていることを assert
+                if not any(ln.startswith("wrote:") for ln in lines):
+                    raise AssertionError(
+                        f"existing 'wrote:' stdout missing under --json-log: {lines}"
+                    )
+                if not any(ln.startswith("slides:") for ln in lines):
+                    raise AssertionError(
+                        f"existing 'slides:' stdout missing under --json-log: {lines}"
+                    )
+            finally:
+                _sys.argv = old_argv
+
+            # ケース 1b: --json-log なし success → JSON 行が増えない (既存 stdout 完全互換)
+            captured.seek(0)
+            captured.truncate()
+            _sys.argv = [
+                "generate_slide_plan.py",
+                "--output", str(output_path),
+            ]
+            try:
+                with contextlib.redirect_stdout(captured):
+                    ret = gsp.main()
+                assert_eq(ret, 0, "no-flag success exit 0")
+                lines = [ln for ln in captured.getvalue().splitlines() if ln.strip()]
+                # 末尾に status JSON が出ていない (既存 print のみ)
+                last = lines[-1] if lines else ""
+                # last は "slides: 1" などの human-readable line のはず、JSON ではない
+                if last.startswith("{") and last.endswith("}"):
+                    try:
+                        parsed = json.loads(last)
+                        if "status" in parsed and "exit_code" in parsed:
+                            raise AssertionError(
+                                f"--json-log なしで status JSON が emit された: {last!r}"
+                            )
+                    except json.JSONDecodeError:
+                        pass  # 偶然 {} で囲まれているだけならパス
             finally:
                 _sys.argv = old_argv
 
