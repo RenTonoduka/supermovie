@@ -12810,6 +12810,70 @@ def test_readme_quickstart_workflow_matches_claude_pipeline_lint() -> None:
     )
 
 
+def test_skill_frontmatter_required_fields_lint() -> None:
+    """PR-AF: every skills/*/SKILL.md frontmatter must have non-empty required fields:
+    name, description, argument-hint, allowed-tools.
+    Uses simplified stdlib-only regex (no PyYAML dependency); checks field presence
+    and non-empty value for the subset of scalar/block-scalar formats actually used.
+    Delimiter anchored to ^---$ to avoid partial matches.
+    """
+    import re
+
+    repo_root = Path(__file__).parents[2]
+    skills_dir = repo_root / "skills"
+    required_fields = ("name", "description", "argument-hint", "allowed-tools")
+    errors: list[str] = []
+
+    for skill_path in sorted(skills_dir.iterdir()):
+        if not skill_path.is_dir():
+            continue
+        skill_md_path = skill_path / "SKILL.md"
+        if not skill_md_path.exists():
+            continue
+        content = skill_md_path.read_text(encoding="utf-8")
+
+        # Require exactly --- on its own line as delimiter
+        fm_m = re.match(r"^---\s*$\n(.*?)^---\s*$", content, re.MULTILINE | re.DOTALL)
+        if not fm_m:
+            errors.append(f"{skill_path.name}/SKILL.md: missing YAML frontmatter (--- block)")
+            continue
+        fm_block = fm_m.group(1)
+
+        for field in required_fields:
+            key_pat = rf"^{re.escape(field)}:"
+            key_m = re.search(key_pat, fm_block, re.MULTILINE)
+            if not key_m:
+                errors.append(
+                    f"{skill_path.name}/SKILL.md: frontmatter missing field '{field}'"
+                )
+                continue
+
+            # Inline value: "field: value"
+            inline_m = re.search(
+                rf"^{re.escape(field)}:\s+(\S.*)", fm_block, re.MULTILINE
+            )
+            if inline_m and inline_m.group(1).strip():
+                continue  # non-empty inline value — OK
+
+            # Block-scalar value: "field: |" or "field: >" followed by indented content
+            block_m = re.search(
+                rf"^{re.escape(field)}:\s*[|>]\s*\n(\s+\S)",
+                fm_block,
+                re.MULTILINE,
+            )
+            if block_m:
+                continue  # non-empty block scalar — OK
+
+            errors.append(
+                f"{skill_path.name}/SKILL.md: frontmatter '{field}' is empty or unrecognized format"
+            )
+
+    assert not errors, (
+        f"SKILL.md frontmatter required fields missing ({len(errors)} error(s)):\n"
+        + "\n".join(f"  - {e}" for e in errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -13006,6 +13070,8 @@ def main() -> int:
         test_claude_pipeline_commands_have_skill_and_readme_coverage_lint,
         # PR-AE (README quickstart workflow sentence includes all pipeline steps in order): 1 件
         test_readme_quickstart_workflow_matches_claude_pipeline_lint,
+        # PR-AF (skill frontmatter required fields lint): 1 件
+        test_skill_frontmatter_required_fields_lint,
     ]
     failed = []
     for t in tests:
