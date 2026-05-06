@@ -15283,6 +15283,28 @@ def test_slide_segment_schema_contract_lint() -> None:
     )
 
 
+def test_narration_mode_invalidate_resets_cached_mode() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    mode_file = template_root / "src" / "Narration" / "mode.ts"
+    assert mode_file.is_file(), "template/src/Narration/mode.ts not found"
+    raw = mode_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    if not re.search(r"\blet\s+_modeCache\b", text):
+        errors.append("mode.ts: module-level 'let _modeCache' not found")
+    if not re.search(r"\b_modeCache\s*!==\s*undefined\b", text):
+        errors.append("mode.ts: getNarrationMode() must guard with '_modeCache !== undefined' early return")
+    if not re.search(r"\bexport\b.*\binvalidateNarrationMode\b", text, re.DOTALL):
+        errors.append("mode.ts: invalidateNarrationMode is not exported")
+    if not re.search(r"\b_modeCache\s*=\s*undefined\s*;", text):
+        errors.append("mode.ts: invalidateNarrationMode must reset '_modeCache = undefined'")
+    assert errors == [], (
+        "template/src/Narration/mode.ts cache invalidation contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15595,6 +15617,7 @@ def main() -> int:
         test_bgm_file_constant_is_single_source_for_presence_check_and_audio_src,
         test_slide_uses_sequence_local_frame_without_startframe_offset,
         test_slide_segment_schema_contract_lint,
+        test_narration_mode_invalidate_resets_cached_mode,
     ]
     failed = []
     for t in tests:
