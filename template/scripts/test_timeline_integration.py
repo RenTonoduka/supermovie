@@ -15234,6 +15234,32 @@ def test_bgm_file_constant_is_single_source_for_presence_check_and_audio_src() -
     )
 
 
+def test_slide_uses_sequence_local_frame_without_startframe_offset() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    slide_file = template_root / "src" / "Slides" / "Slide.tsx"
+    assert slide_file.is_file(), "template/src/Slides/Slide.tsx not found"
+    raw = slide_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    if not re.search(r"\buseCurrentFrame\s*\(\s*\)", text):
+        errors.append("Slide.tsx: useCurrentFrame() not found")
+    if re.search(r"\bframe\s*-\s*segment\.startFrame\b", text):
+        errors.append(
+            "Slide.tsx: 'frame - segment.startFrame' found — inside a Remotion Sequence "
+            "useCurrentFrame() already returns 0-based local frame; subtracting startFrame is a double-offset bug"
+        )
+    if not re.search(r"\binterpolate\s*\(\s*frame\b", text):
+        errors.append(
+            "Slide.tsx: interpolate(frame, ...) not found — must feed useCurrentFrame() result "
+            "directly into interpolate without offset subtraction"
+        )
+    assert errors == [], (
+        "Slide.tsx Sequence-local frame contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15544,6 +15570,7 @@ def main() -> int:
         test_entrypoint_registers_remotion_root,
         # PR-CT (BGM.tsx uses BGM_FILE constant for both presence check and audio src lint): 1 件
         test_bgm_file_constant_is_single_source_for_presence_check_and_audio_src,
+        test_slide_uses_sequence_local_frame_without_startframe_offset,
     ]
     failed = []
     for t in tests:
