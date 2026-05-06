@@ -14400,6 +14400,31 @@ def test_video_config_format_map_parity_lint() -> None:
     assert errors == [], "videoConfig.ts format map parity lint failed:\n" + "\n".join(errors)
 
 
+def test_package_json_test_timeline_script_path_resolves_lint() -> None:
+    """PR-BQ: package.json scripts['test:timeline'] must use python3 and point to an existing file.
+    Catches script rename/move drift so CI never silently runs nothing.
+    """
+    import json
+
+    template_root = Path(__file__).parents[1]
+    pkg = json.loads((template_root / "package.json").read_text(encoding="utf-8"))
+    cmd = pkg.get("scripts", {}).get("test:timeline", "")
+    assert cmd, "package.json: 'test:timeline' script not found"
+
+    parts = cmd.strip().split()
+    assert len(parts) >= 2, (
+        f"package.json: test:timeline must be 'python3 <path>', got {cmd!r}"
+    )
+    assert parts[0] == "python3", (
+        f"package.json: test:timeline must use python3, got {parts[0]!r}"
+    )
+    script_path = template_root / parts[1]
+    assert script_path.is_file(), (
+        f"package.json: test:timeline points to non-existent file {parts[1]!r} "
+        f"(resolved: {script_path})"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14670,6 +14695,8 @@ def main() -> int:
         test_remotion_entrypoint_coherence_lint,
         # PR-BP (VideoFormat union must match RESOLUTION_MAP and TELOP_CONFIG_MAP keys): 1 件
         test_video_config_format_map_parity_lint,
+        # PR-BQ (package.json test:timeline must use python3 and point to existing file): 1 件
+        test_package_json_test_timeline_script_path_resolves_lint,
     ]
     failed = []
     for t in tests:
