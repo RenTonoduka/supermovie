@@ -14731,6 +14731,22 @@ def test_context_anchor_required_sections_lint() -> None:
     )
 
 
+def test_main_video_imports_video_config_lint() -> None:
+    """PR-CD: template/src/MainVideo.tsx must import from ./videoConfig.
+    Catches drift where render config changes stop flowing into the composition entrypoint.
+    """
+    import re
+
+    template_root = Path(__file__).parents[1]
+    main_video_path = template_root / "src" / "MainVideo.tsx"
+    assert main_video_path.is_file(), "template/src/MainVideo.tsx not found"
+    text = main_video_path.read_text(encoding="utf-8")
+    assert re.search(r"""from\s+['"]\.\/videoConfig['"]""", text), (
+        "template/src/MainVideo.tsx: missing import from './videoConfig' — "
+        "render config changes will not flow into the composition entrypoint"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15018,6 +15034,7 @@ def main() -> int:
         test_template_src_required_directories_lint,
         test_docs_required_files_present_lint,
         test_context_anchor_required_sections_lint,
+        test_main_video_imports_video_config_lint,
     ]
     failed = []
     for t in tests:
