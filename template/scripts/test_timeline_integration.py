@@ -15134,6 +15134,30 @@ def test_telop_player_bridges_telop_data_to_registry_templates() -> None:
     )
 
 
+def test_narration_watch_uses_mode_constants_and_data_files() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    hook_file = template_root / "src" / "Narration" / "useNarrationMode.ts"
+    assert hook_file.is_file(), "template/src/Narration/useNarrationMode.ts not found"
+    raw = hook_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    errors: list[str] = []
+    if not re.search(r"""import\s*\{[^}]*\bnarrationData\b[^}]*\}\s*from\s*['"]\.\/narrationData['"]""", text):
+        errors.append("useNarrationMode.ts: missing import of 'narrationData' from './narrationData'")
+    for const_name in ("NARRATION_LEGACY_FILE", "NARRATION_READY_FILE"):
+        if not re.search(rf"""\b{const_name}\b""", text):
+            errors.append(f"useNarrationMode.ts: '{const_name}' not referenced (must import from './mode', not hardcode)")
+    if not re.search(r"watchStaticFile\s*\(\s*NARRATION_LEGACY_FILE\b", text):
+        errors.append("useNarrationMode.ts: watchStaticFile(NARRATION_LEGACY_FILE, ...) not found")
+    if not re.search(r"watchStaticFile\s*\(\s*NARRATION_READY_FILE\b", text):
+        errors.append("useNarrationMode.ts: watchStaticFile(NARRATION_READY_FILE, ...) not found")
+    if not re.search(r"\bfor\s*\(.*\bnarrationData\b", text):
+        errors.append("useNarrationMode.ts: 'for (...narrationData...)' loop not found — must watch chunk files dynamically")
+    assert errors == [], (
+        "useNarrationMode.ts watch SSoT contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15436,6 +15460,8 @@ def main() -> int:
         test_sequence_components_are_data_driven_from_local_arrays,
         # PR-CP (TelopPlayer bridges telopData to registry templates lint): 1 件
         test_telop_player_bridges_telop_data_to_registry_templates,
+        # PR-CQ (useNarrationMode.ts watches mode constants + narrationData files lint): 1 件
+        test_narration_watch_uses_mode_constants_and_data_files,
     ]
     failed = []
     for t in tests:
