@@ -15476,6 +15476,52 @@ def test_sound_effect_schema_and_se_data_export_lint() -> None:
     )
 
 
+def test_telop_styles_animation_exports_motion_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    styles_file = template_root / "src" / "テロップテンプレート" / "telopStyles.ts"
+    assert styles_file.is_file(), "template/src/テロップテンプレート/telopStyles.ts not found"
+    raw = styles_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    expected_animations = (
+        "animation_none",
+        "animation_slideFromLeft",
+        "animation_fadeBlurFromBottom",
+        "animation_slideIn",
+        "animation_fadeOnly",
+        "animation_slideLeftFadeBlur",
+        "animation_fadeFromRight",
+        "animation_fadeFromLeft",
+        "animation_charByChar",
+    )
+    blocks: dict[str, str] = {
+        m.group(1): b
+        for b in re.split(r"(?=export const )", text)
+        if (m := re.match(r"export const (animation_\w+)\s*=\s*\{", b.strip()))
+    }
+    errors: list[str] = []
+    for name in expected_animations:
+        if name not in blocks:
+            errors.append(f"telopStyles.ts: '{name}' export not found")
+            continue
+        block = blocks[name]
+        if not re.search(r"slideDirection\s*:\s*['\"](?:up|down|left|right)['\"]\s+as\s+const", block):
+            errors.append(f"{name}: slideDirection must be 'up'|'down'|'left'|'right' as const")
+        spring_match = re.search(r"\bspring\s*:\s*\{([^}]*)\}", block, re.DOTALL)
+        if not spring_match:
+            errors.append(f"{name}: spring object not found")
+        else:
+            spring_body = spring_match.group(1)
+            for field in ("damping", "stiffness", "mass"):
+                if not re.search(rf"\b{field}\s*:\s*[0-9.]+", spring_body):
+                    errors.append(f"{name}: spring.{field} not found inside spring object")
+    assert errors == [], (
+        "template/src/テロップテンプレート/telopStyles.ts animation motion contract drift:\n"
+        + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15796,6 +15842,7 @@ def main() -> int:
         test_telop_segment_schema_contract_lint,
         test_telop_config_types_export_style_shape_and_slide_direction_union,
         test_sound_effect_schema_and_se_data_export_lint,
+        test_telop_styles_animation_exports_motion_contract_lint,
     ]
     failed = []
     for t in tests:
