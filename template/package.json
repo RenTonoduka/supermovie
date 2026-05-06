@@ -7,29 +7,38 @@
   "private": true,
   "dependencies": {
     "@remotion/cli": "4.0.403",
+    "@remotion/tailwind-v4": "4.0.403",
     "@remotion/zod-types": "4.0.403",
+    "budoux": "^0.8.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "remotion": "4.0.403",
-    "zod": "3.22.3",
-    "@remotion/tailwind-v4": "4.0.403",
     "tailwindcss": "4.0.0",
-    "budoux": "^0.8.0"
+    "zod": "3.22.3"
   },
   "devDependencies": {
     "@remotion/eslint-config-flat": "4.0.403",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "19.2.7",
     "@types/web": "0.0.166",
     "eslint": "9.19.0",
+    "jsdom": "^29.1.1",
     "prettier": "3.6.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^1.6.1"
   },
   "scripts": {
     "dev": "remotion studio",
     "build": "remotion bundle",
     "render": "remotion render MainVideo out/video.mp4",
     "upgrade": "remotion upgrade",
-    "lint": "eslint src && tsc"
+    "lint": "eslint src && tsc",
+    "visual-smoke": "python3 scripts/visual_smoke.py",
+    "test:visual-smoke": "python3 scripts/visual_smoke.py",
+    "test:timeline": "python3 scripts/test_timeline_integration.py",
+    "test:react": "vitest run --config vitest.config.ts",
+    "test": "npm run lint && npm run test:timeline && npm run test:react"
   },
   "sideEffects": [
     "*.css"
