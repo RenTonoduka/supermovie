@@ -15076,6 +15076,39 @@ def test_telop_template_registry_metadata_contract_lint() -> None:
     )
 
 
+def test_sequence_components_are_data_driven_from_local_arrays() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    COMPONENTS = [
+        ("Slides/SlideSequence.tsx", "slideData", "./slideData"),
+        ("InsertImage/ImageSequence.tsx", "insertImageData", "./insertImageData"),
+        ("Title/Title.tsx", "titleData", "./titleData"),
+        ("SoundEffects/SESequence.tsx", "seData", "./seData"),
+    ]
+    errors: list[str] = []
+    for rel_path, data_name, data_module in COMPONENTS:
+        file_path = template_root / "src" / rel_path
+        if not file_path.is_file():
+            errors.append(f"template/src/{rel_path}: file not found")
+            continue
+        raw = file_path.read_text(encoding="utf-8")
+        text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+        if not re.search(
+            rf"""import\s*\{{[^}}]*\b{re.escape(data_name)}\b[^}}]*\}}\s*from\s*['"]{re.escape(data_module)}['"]""",
+            text,
+        ):
+            errors.append(
+                f"template/src/{rel_path}: missing import of '{data_name}' from '{data_module}'"
+            )
+        if not re.search(rf"\b{re.escape(data_name)}\.map\s*\(", text):
+            errors.append(
+                f"template/src/{rel_path}: '{data_name}.map(' not found — component must render from data array"
+            )
+    assert errors == [], (
+        "Sequence components must be data-driven from local data arrays:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15374,6 +15407,8 @@ def main() -> int:
         test_text_overlay_telop_config_ssot_contract_lint,
         test_telop_template_registry_file_coverage_lint,
         test_telop_template_registry_metadata_contract_lint,
+        # PR-CO (sequence components are data-driven from local arrays lint): 1 件
+        test_sequence_components_are_data_driven_from_local_arrays,
     ]
     failed = []
     for t in tests:
