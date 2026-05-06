@@ -14786,6 +14786,30 @@ def test_sm_claude_entrypoint_executable_lint() -> None:
     )
 
 
+def test_template_css_entrypoint_side_effects_lint() -> None:
+    """PR-CG: Root.tsx must import ./index.css and package.json must declare sideEffects: ['*.css'].
+    Guards against the Tailwind/global CSS entrypoint being silently dropped or tree-shaken.
+    Complements remotion_config (webpack Tailwind plugin) with the CSS import + packaging contract.
+    """
+    import json, re
+
+    template_root = Path(__file__).parents[1]
+
+    root_tsx = template_root / "src" / "Root.tsx"
+    assert root_tsx.is_file(), "template/src/Root.tsx not found"
+    root_text = root_tsx.read_text(encoding="utf-8")
+    assert re.search(r"""import\s+['"]\.\/index\.css['"]""", root_text), (
+        "template/src/Root.tsx: missing 'import \"./index.css\"'"
+    )
+
+    pkg = json.loads((template_root / "package.json").read_text(encoding="utf-8"))
+    side_effects = pkg.get("sideEffects")
+    assert side_effects is not None, "package.json: missing 'sideEffects' field"
+    assert "*.css" in side_effects, (
+        f"package.json: 'sideEffects' must include '*.css', got {side_effects!r}"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15076,6 +15100,7 @@ def main() -> int:
         test_main_video_imports_video_config_lint,
         test_scripts_required_files_executable_lint,
         test_sm_claude_entrypoint_executable_lint,
+        test_template_css_entrypoint_side_effects_lint,
     ]
     failed = []
     for t in tests:
