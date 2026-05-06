@@ -15210,6 +15210,30 @@ def test_entrypoint_registers_remotion_root() -> None:
     )
 
 
+def test_bgm_file_constant_is_single_source_for_presence_check_and_audio_src() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    bgm_file = template_root / "src" / "SoundEffects" / "BGM.tsx"
+    assert bgm_file.is_file(), "template/src/SoundEffects/BGM.tsx not found"
+    raw = bgm_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    const_match = re.search(r"\bBGM_FILE\s*=\s*['\"]([^'\"]+)['\"]", text)
+    if not const_match:
+        errors.append("BGM.tsx: BGM_FILE constant not found")
+    else:
+        if not re.search(r"\bBGM_FILE\b", text[const_match.end():]):
+            errors.append("BGM.tsx: BGM_FILE constant defined but never used after definition")
+        if not re.search(r"getStaticFiles\s*\(\s*\).*\bBGM_FILE\b", text, re.DOTALL):
+            errors.append("BGM.tsx: BGM_FILE not used in getStaticFiles() presence check")
+        if not re.search(r"\bstaticFile\s*\(\s*BGM_FILE\s*\)", text):
+            errors.append("BGM.tsx: staticFile(BGM_FILE) not found — audio src must use the constant")
+    assert errors == [], (
+        "BGM.tsx BGM_FILE SSoT contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15518,6 +15542,8 @@ def main() -> int:
         test_narration_audio_with_mode_is_pure_mode_prop_renderer,
         # PR-CS (index.ts imports RemotionRoot and calls registerRoot lint): 1 件
         test_entrypoint_registers_remotion_root,
+        # PR-CT (BGM.tsx uses BGM_FILE constant for both presence check and audio src lint): 1 件
+        test_bgm_file_constant_is_single_source_for_presence_check_and_audio_src,
     ]
     failed = []
     for t in tests:
