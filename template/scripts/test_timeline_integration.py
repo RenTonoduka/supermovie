@@ -14358,6 +14358,48 @@ def test_remotion_entrypoint_coherence_lint() -> None:
     )
 
 
+def test_video_config_format_map_parity_lint() -> None:
+    """PR-BP: VideoFormat union members must match RESOLUTION_MAP and TELOP_CONFIG_MAP keys
+    in template/src/videoConfig.ts, catching drift when a format is added/removed.
+    """
+    import re
+
+    repo_root = Path(__file__).parents[2]
+    vc_text = (repo_root / "template" / "src" / "videoConfig.ts").read_text(encoding="utf-8")
+
+    # Extract VideoFormat union: 'youtube' | 'short' | 'square'
+    union_match = re.search(
+        r"export\s+type\s+VideoFormat\s*=\s*([^;]+);", vc_text
+    )
+    assert union_match, "videoConfig.ts: VideoFormat type declaration not found"
+    union_formats = set(re.findall(r"'([^']+)'", union_match.group(1)))
+
+    # Extract RESOLUTION_MAP keys — top-level keys at exactly 2-space indent
+    res_match = re.search(
+        r"const\s+RESOLUTION_MAP\s*=\s*\{(.+?)^\}", vc_text, re.DOTALL | re.MULTILINE
+    )
+    assert res_match, "videoConfig.ts: RESOLUTION_MAP not found"
+    resolution_keys = set(re.findall(r"^  ([a-zA-Z_][a-zA-Z0-9_]*)\s*:", res_match.group(1), re.MULTILINE))
+
+    # Extract TELOP_CONFIG_MAP keys — top-level keys at exactly 2-space indent
+    telop_match = re.search(
+        r"const\s+TELOP_CONFIG_MAP\s*=\s*\{(.+?)^\}", vc_text, re.DOTALL | re.MULTILINE
+    )
+    assert telop_match, "videoConfig.ts: TELOP_CONFIG_MAP not found"
+    telop_keys = set(re.findall(r"^  ([a-zA-Z_][a-zA-Z0-9_]*)\s*:", telop_match.group(1), re.MULTILINE))
+
+    errors: list[str] = []
+    if resolution_keys != union_formats:
+        errors.append(
+            f"RESOLUTION_MAP keys {sorted(resolution_keys)} != VideoFormat {sorted(union_formats)}"
+        )
+    if telop_keys != union_formats:
+        errors.append(
+            f"TELOP_CONFIG_MAP keys {sorted(telop_keys)} != VideoFormat {sorted(union_formats)}"
+        )
+    assert errors == [], "videoConfig.ts format map parity lint failed:\n" + "\n".join(errors)
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14626,6 +14668,8 @@ def main() -> int:
         test_repo_root_tracked_paths_allowlist_lint,
         # PR-BO (Remotion render target in package.json must match Composition id in Root.tsx): 1 件
         test_remotion_entrypoint_coherence_lint,
+        # PR-BP (VideoFormat union must match RESOLUTION_MAP and TELOP_CONFIG_MAP keys): 1 件
+        test_video_config_format_map_parity_lint,
     ]
     failed = []
     for t in tests:
