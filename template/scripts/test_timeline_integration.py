@@ -14704,6 +14704,33 @@ def test_docs_required_files_present_lint() -> None:
     )
 
 
+def test_context_anchor_required_sections_lint() -> None:
+    """PR-CC: CONTEXT_ANCHOR.md must contain all required release-governance section headings.
+    Catches handoff drift where required gates or authorized decisions silently disappear.
+    """
+    import re
+
+    repo_root = Path(__file__).parents[2]
+    anchor_path = repo_root / "CONTEXT_ANCHOR.md"
+    assert anchor_path.is_file(), "CONTEXT_ANCHOR.md not found in repo root"
+    text = anchor_path.read_text(encoding="utf-8")
+    actual_headings = set(re.findall(r"^##\s+(.+)$", text, re.MULTILINE))
+    REQUIRED_HEADINGS = {
+        "Purpose",
+        "Verified Snapshot (作成時点で Bash 実測、push/PR 前に再更新)",
+        "Roku Authorized Decisions (2026-05-05 user prompt 確定)",
+        "Required Gates (Draft PR 開始は composite gate のみで可、merge 前に Roku machine で visual-smoke / render 実行必須、Codex 12:08 命令 §A + Codex 4th review verdict)",
+        "External Actions (権限分類)",
+        "Codex Review Protocol",
+        "更新責任",
+        "Related Files",
+    }
+    missing = sorted(REQUIRED_HEADINGS - actual_headings)
+    assert not missing, (
+        f"CONTEXT_ANCHOR.md missing required ## sections: {missing}"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14990,6 +15017,7 @@ def main() -> int:
         test_package_json_identity_contract_lint,
         test_template_src_required_directories_lint,
         test_docs_required_files_present_lint,
+        test_context_anchor_required_sections_lint,
     ]
     failed = []
     for t in tests:
