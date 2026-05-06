@@ -14772,6 +14772,20 @@ def test_scripts_required_files_executable_lint() -> None:
     )
 
 
+def test_sm_claude_entrypoint_executable_lint() -> None:
+    """PR-CF: sm-claude.sh must exist at repo root and be executable.
+    Catches broken plugin installs where the main CLI entrypoint cannot be invoked.
+    """
+    import os
+
+    repo_root = Path(__file__).parents[2]
+    sm_path = repo_root / "sm-claude.sh"
+    assert sm_path.is_file(), "sm-claude.sh not found in repo root"
+    assert os.access(sm_path, os.X_OK), (
+        "sm-claude.sh is not executable — missing +x permission"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15061,6 +15075,7 @@ def main() -> int:
         test_context_anchor_required_sections_lint,
         test_main_video_imports_video_config_lint,
         test_scripts_required_files_executable_lint,
+        test_sm_claude_entrypoint_executable_lint,
     ]
     failed = []
     for t in tests:
