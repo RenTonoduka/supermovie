@@ -15422,6 +15422,27 @@ def test_telop_segment_schema_contract_lint() -> None:
     )
 
 
+def test_telop_config_types_export_style_shape_and_slide_direction_union() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    config_file = template_root / "src" / "テロップテンプレート" / "telopConfigTypes.ts"
+    assert config_file.is_file(), "template/src/テロップテンプレート/telopConfigTypes.ts not found"
+    raw = config_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    for field in ("font:", "textShadow:", "textStroke:", "background:", "position:"):
+        if not re.search(rf"\b{re.escape(field)}", text):
+            errors.append(f"TelopStyleConfig: required field '{field}' not found")
+    if not re.search(
+        r"TelopSlideDirection\s*=\s*'up'\s*\|\s*'down'\s*\|\s*'left'\s*\|\s*'right'", text
+    ):
+        errors.append("telopConfigTypes.ts: TelopSlideDirection = 'up' | 'down' | 'left' | 'right' not found")
+    assert errors == [], (
+        "template/src/テロップテンプレート/telopConfigTypes.ts style shape contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15740,6 +15761,7 @@ def main() -> int:
         test_narration_segment_required_fields_contract_lint,
         test_title_data_toframe_uses_video_config_fps_lint,
         test_telop_segment_schema_contract_lint,
+        test_telop_config_types_export_style_shape_and_slide_direction_union,
     ]
     failed = []
     for t in tests:
