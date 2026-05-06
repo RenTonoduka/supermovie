@@ -15158,6 +15158,34 @@ def test_narration_watch_uses_mode_constants_and_data_files() -> None:
     )
 
 
+def test_narration_audio_with_mode_is_pure_mode_prop_renderer() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    narration_file = template_root / "src" / "Narration" / "NarrationAudio.tsx"
+    assert narration_file.is_file(), "template/src/Narration/NarrationAudio.tsx not found"
+    raw = narration_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    if not re.search(r"\bNarrationAudioWithMode\b", text):
+        errors.append("NarrationAudio.tsx: NarrationAudioWithMode component not found")
+    else:
+        if not re.search(r"\bmode\s*:\s*NarrationMode\b", text):
+            errors.append("NarrationAudio.tsx: NarrationAudioWithModeProps missing 'mode: NarrationMode' field")
+        start = re.search(r"export\s+const\s+NarrationAudioWithMode\b", text)
+        if start:
+            rest = text[start.start():]
+            next_export = re.search(r"\nexport\s+", rest[len("export"):])
+            body = rest[:len("export") + next_export.start() + 1] if next_export else rest
+            if re.search(r"\buseNarrationMode\s*\(", body):
+                errors.append(
+                    "NarrationAudioWithMode: calls useNarrationMode() internally — must be pure mode-prop renderer"
+                )
+    assert errors == [], (
+        "NarrationAudioWithMode pure mode-prop contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15462,6 +15490,8 @@ def main() -> int:
         test_telop_player_bridges_telop_data_to_registry_templates,
         # PR-CQ (useNarrationMode.ts watches mode constants + narrationData files lint): 1 件
         test_narration_watch_uses_mode_constants_and_data_files,
+        # PR-CR (NarrationAudioWithMode is pure mode-prop renderer, no internal hook call lint): 1 件
+        test_narration_audio_with_mode_is_pure_mode_prop_renderer,
     ]
     failed = []
     for t in tests:
