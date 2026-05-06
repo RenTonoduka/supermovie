@@ -15035,6 +15035,47 @@ def test_telop_template_registry_file_coverage_lint() -> None:
     )
 
 
+def test_telop_template_registry_metadata_contract_lint() -> None:
+    """PR-CN: Every .tsx telop template's filename stem must appear as a displayName in the registry,
+    and each registry entry's category must match the source directory (main/emphasis/negative).
+    Complements file-coverage lint by verifying metadata is correct, not just present.
+    """
+    import re
+
+    template_root = Path(__file__).parents[1]
+    registry_path = template_root / "src" / "テロップテンプレート" / "telopTemplateRegistry.tsx"
+    assert registry_path.is_file(), "telopTemplateRegistry.tsx not found"
+    text = registry_path.read_text(encoding="utf-8")
+
+    entries = re.findall(r"category:\s*'(\w+)',\s*displayName:\s*'([^']+)'", text)
+    display_names_by_category: dict[str, set[str]] = {}
+    for cat, name in entries:
+        display_names_by_category.setdefault(cat, set()).add(name)
+
+    DIR_TO_CATEGORY = {
+        "メインテロップ": "main",
+        "強調テロップ": "emphasis",
+        "ネガティブテロップ": "negative",
+    }
+    errors: list[str] = []
+    for dir_name, expected_cat in DIR_TO_CATEGORY.items():
+        dir_path = template_root / "src" / dir_name
+        if not dir_path.is_dir():
+            errors.append(f"template/src/{dir_name}: directory not found")
+            continue
+        cat_names = display_names_by_category.get(expected_cat, set())
+        for tsx_file in sorted(dir_path.glob("*.tsx")):
+            stem = tsx_file.stem
+            if stem not in cat_names:
+                errors.append(
+                    f"telopTemplateRegistry.tsx: '{stem}' not found as displayName with category='{expected_cat}'"
+                )
+
+    assert errors == [], (
+        "telopTemplateRegistry.tsx metadata contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15332,6 +15373,7 @@ def main() -> int:
         test_main_video_narration_mode_ssot_contract_lint,
         test_text_overlay_telop_config_ssot_contract_lint,
         test_telop_template_registry_file_coverage_lint,
+        test_telop_template_registry_metadata_contract_lint,
     ]
     failed = []
     for t in tests:
