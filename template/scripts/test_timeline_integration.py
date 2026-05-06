@@ -15730,6 +15730,41 @@ def test_telop_data_typed_export_and_video_config_ssot_contract_lint() -> None:
     )
 
 
+def test_se_sequence_wraps_sound_effects_in_sequence_audio_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    seq_file = template_root / "src" / "SoundEffects" / "SESequence.tsx"
+    assert seq_file.is_file(), "template/src/SoundEffects/SESequence.tsx not found"
+    raw = seq_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    remotion_import = re.search(r"""import\s*\{([^}]*)\}\s*from\s*['"]remotion['"]""", text)
+    if not remotion_import:
+        errors.append("SESequence.tsx: no import from 'remotion' found")
+    else:
+        remotion_body = remotion_import.group(1)
+        for sym in ("Audio", "Sequence", "staticFile"):
+            if not re.search(rf"\b{sym}\b", remotion_body):
+                errors.append(f"SESequence.tsx: '{sym}' not imported from 'remotion'")
+    if not re.search(r"\bseData\.map\s*\(", text):
+        errors.append("SESequence.tsx: seData.map() not found — must be data-driven")
+    if not re.search(r"\bkey=\{se\.id\}", text):
+        errors.append("SESequence.tsx: key={se.id} not found on <Sequence>")
+    if not re.search(r"\bfrom=\{se\.startFrame\}", text):
+        errors.append("SESequence.tsx: from={se.startFrame} not found on <Sequence>")
+    if not re.search(r"\bdurationInFrames=\{90\}", text):
+        errors.append("SESequence.tsx: durationInFrames={90} not found — SE fixed 90-frame window")
+    if not re.search(r"<Audio\s+src=\{staticFile\(", text):
+        errors.append("SESequence.tsx: <Audio src={staticFile(...)} not found — must use staticFile for asset path")
+    if not re.search(r"\bse\.volume\s*\?\?\s*1\b", text):
+        errors.append("SESequence.tsx: 'se.volume ?? 1' not found — volume must default to 1 when undefined")
+    assert errors == [], (
+        "template/src/SoundEffects/SESequence.tsx Sequence/Audio contract drift:\n"
+        + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -16058,6 +16093,7 @@ def main() -> int:
         test_slide_sequence_wraps_slide_segments_in_sequence_frame_ranges_lint,
         test_image_sequence_wraps_image_segments_in_sequence_frame_ranges_lint,
         test_telop_data_typed_export_and_video_config_ssot_contract_lint,
+        test_se_sequence_wraps_sound_effects_in_sequence_audio_contract_lint,
     ]
     failed = []
     for t in tests:
