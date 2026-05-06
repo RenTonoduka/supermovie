@@ -7,7 +7,8 @@ export type VideoFormat = 'youtube' | 'short' | 'square';
 // ---- ここを /supermovie-init が書き換える ----
 export const FORMAT: VideoFormat = 'youtube';
 export const FPS = 30;
-export const DURATION_FRAMES = 1500; // placeholder
+// 元動画 (source) の総フレーム数。cut 後の総フレームは cutData.ts の CUT_TOTAL_FRAMES を使う
+export const SOURCE_DURATION_FRAMES = 1500; // placeholder
 export const VIDEO_FILE = 'main.mp4';
 // ---- ここまで ----
 
