@@ -14665,6 +14665,26 @@ def test_package_json_identity_contract_lint() -> None:
     )
 
 
+def test_template_src_required_directories_lint() -> None:
+    """PR-CA: template/src/ must contain required component/asset subdirectories.
+    Catches packaging errors where generated projects are missing expected import targets or asset drop zones.
+    """
+    template_root = Path(__file__).parents[1]
+    src_root = template_root / "src"
+    assert src_root.is_dir(), "template/src/ directory not found"
+    REQUIRED_DIRS = [
+        "InsertImage",
+        "SoundEffects",
+        "Title",
+        "テロップテンプレート",
+    ]
+    missing = [d for d in REQUIRED_DIRS if not (src_root / d).is_dir()]
+    assert not missing, (
+        f"template/src/ missing required subdirectories: {missing}\n"
+        f"(present: {sorted(p.name for p in src_root.iterdir() if p.is_dir())})"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14949,6 +14969,7 @@ def main() -> int:
         test_package_json_remotion_version_parity_lint,
         test_videoconfig_required_exports_present_lint,
         test_package_json_identity_contract_lint,
+        test_template_src_required_directories_lint,
     ]
     failed = []
     for t in tests:
