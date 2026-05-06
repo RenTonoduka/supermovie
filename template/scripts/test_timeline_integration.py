@@ -15109,6 +15109,31 @@ def test_sequence_components_are_data_driven_from_local_arrays() -> None:
     )
 
 
+def test_telop_player_bridges_telop_data_to_registry_templates() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    telop_player = template_root / "src" / "テロップテンプレート" / "TelopPlayer.tsx"
+    assert telop_player.is_file(), "template/src/テロップテンプレート/TelopPlayer.tsx not found"
+    raw = telop_player.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    errors: list[str] = []
+    if not re.search(r"""import\s*\{[^}]*\btelopData\b[^}]*\}\s*from\s*['"]\.\/telopData['"]""", text):
+        errors.append("TelopPlayer.tsx: missing import of 'telopData' from './telopData'")
+    if not re.search(r"""import\s*\{[^}]*\btelopTemplateRegistry\b[^}]*\}\s*from\s*['"]\.\/telopTemplateRegistry['"]""", text):
+        errors.append("TelopPlayer.tsx: missing import of 'telopTemplateRegistry' from './telopTemplateRegistry'")
+    if not re.search(r"\btelopData\.find\s*\(", text):
+        errors.append("TelopPlayer.tsx: 'telopData.find(' not found — must select active segment by frame range")
+    if not re.search(r"\bsubtitles\s*:\s*\[", text):
+        errors.append("TelopPlayer.tsx: 'subtitles: [' not found — must wrap single segment into SubtitleData")
+    if not re.search(r"""import\s*\{[^}]*\bTelop\b[^}]*\}\s*from\s*['"]\.\/Telop['"]""", text):
+        errors.append("TelopPlayer.tsx: missing import of 'Telop' from './Telop' (legacy fallback path)")
+    if not re.search(r"<Telop\s", text):
+        errors.append("TelopPlayer.tsx: '<Telop ' not found — legacy fallback to Telop.tsx is required")
+    assert errors == [], (
+        "TelopPlayer.tsx bridge contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15409,6 +15434,8 @@ def main() -> int:
         test_telop_template_registry_metadata_contract_lint,
         # PR-CO (sequence components are data-driven from local arrays lint): 1 件
         test_sequence_components_are_data_driven_from_local_arrays,
+        # PR-CP (TelopPlayer bridges telopData to registry templates lint): 1 件
+        test_telop_player_bridges_telop_data_to_registry_templates,
     ]
     failed = []
     for t in tests:
