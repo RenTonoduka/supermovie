@@ -15329,6 +15329,29 @@ def test_template_narration_data_exports_typed_empty_array_lint() -> None:
     )
 
 
+def test_insert_image_segment_schema_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    types_file = template_root / "src" / "InsertImage" / "types.ts"
+    assert types_file.is_file(), "template/src/InsertImage/types.ts not found"
+    raw = types_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    for field in ("id:", "startFrame:", "endFrame:", "file:", "type:"):
+        if not re.search(rf"\b{re.escape(field)}", text):
+            errors.append(f"ImageSegment: required field '{field}' not found")
+    if not re.search(
+        r"type\s*:\s*'photo'\s*\|\s*'infographic'\s*\|\s*'overlay'", text
+    ):
+        errors.append("ImageSegment: type must be 'photo' | 'infographic' | 'overlay'")
+    if not re.search(r"\bscale\??\s*:\s*number\b", text):
+        errors.append("ImageSegment: optional 'scale?: number' field not found")
+    assert errors == [], (
+        "template/src/InsertImage/types.ts ImageSegment schema contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15643,6 +15666,7 @@ def main() -> int:
         test_slide_segment_schema_contract_lint,
         test_narration_mode_invalidate_resets_cached_mode,
         test_template_narration_data_exports_typed_empty_array_lint,
+        test_insert_image_segment_schema_contract_lint,
     ]
     failed = []
     for t in tests:
