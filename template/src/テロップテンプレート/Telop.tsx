@@ -1,11 +1,10 @@
 import React from 'react';
-import {
-  useCurrentFrame,
-  interpolate,
-  spring,
-  useVideoConfig,
-} from 'remotion';
+import { useCurrentFrame, interpolate, spring, useVideoConfig } from 'remotion';
 import type { TelopSegment } from './telopTypes';
+import type {
+  TelopAnimationConfig,
+  TelopStyleConfig,
+} from './telopConfigTypes';
 import { TELOP_CONFIG } from '../videoConfig';
 import {
   template1_gradient,
@@ -66,12 +65,12 @@ const getTemplateConfig = (segment: TelopSegment) => {
 // 右からのアニメーションは除外
 const getVariedAnimation = (id: number) => {
   const animations = [
-    animation_fadeOnly,           // 0: フェードのみ
-    animation_fadeFromLeft,       // 1: 左からフェードイン
-    animation_fadeOnly,           // 2: フェードのみ
-    animation_slideFromLeft,      // 3: 左からスライドイン
-    animation_fadeOnly,           // 4: フェードのみ
-    animation_slideLeftFadeBlur,  // 5: 左スライド+フェード+ブラー
+    animation_fadeOnly, // 0: フェードのみ
+    animation_fadeFromLeft, // 1: 左からフェードイン
+    animation_fadeOnly, // 2: フェードのみ
+    animation_slideFromLeft, // 3: 左からスライドイン
+    animation_fadeOnly, // 4: フェードのみ
+    animation_slideLeftFadeBlur, // 5: 左スライド+フェード+ブラー
   ];
   return animations[id % animations.length];
 };
@@ -87,8 +86,10 @@ const getAnimationConfig = (segment: TelopSegment) => {
 
   // その他の明示的な指定
   if (segment.animation === 'slideFromLeft') return animation_slideFromLeft;
-  if (segment.animation === 'fadeBlurFromBottom') return animation_fadeBlurFromBottom;
-  if (segment.animation === 'slideLeftFadeBlur') return animation_slideLeftFadeBlur;
+  if (segment.animation === 'fadeBlurFromBottom')
+    return animation_fadeBlurFromBottom;
+  if (segment.animation === 'slideLeftFadeBlur')
+    return animation_slideLeftFadeBlur;
   if (segment.animation === 'fadeFromRight') return animation_fadeFromRight;
   if (segment.animation === 'fadeFromLeft') return animation_fadeFromLeft;
   if (segment.animation === 'charByChar') return animation_charByChar;
@@ -101,11 +102,13 @@ const getAnimationConfig = (segment: TelopSegment) => {
 // HEXカラーをRGBに変換
 const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16),
-  } : { r: 0, g: 0, b: 0 };
+  return result
+    ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16),
+      }
+    : { r: 0, g: 0, b: 0 };
 };
 
 // 2色間を補間
@@ -123,14 +126,14 @@ const CharByCharText: React.FC<{
   text: string;
   localFrame: number;
   fps: number;
-  config: any;
-  animation: any;
+  config: TelopStyleConfig;
+  animation: TelopAnimationConfig;
   duration: number;
 }> = ({ text, localFrame, fps, config, animation, duration }) => {
   const { font, textShadow } = config;
-  const charDelay = (animation as any).charDelay || 2;
+  const charDelay = animation.charDelay ?? 2;
   const chars = text.split('');
-  const fillGradient = (font as any).fillGradient;
+  const fillGradient = font.fillGradient;
   const hasFillGradient = fillGradient?.enabled;
 
   // フェードアウト用の全体opacity
@@ -139,7 +142,7 @@ const CharByCharText: React.FC<{
     localFrame,
     [duration - fadeOut, duration],
     [1, 0],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
   );
 
   return (
@@ -156,15 +159,13 @@ const CharByCharText: React.FC<{
         const translateY = interpolate(
           charSpring,
           [0, 1],
-          [-animation.slideInDistance, 0]
+          [-animation.slideInDistance, 0],
         );
 
-        const charOpacity = interpolate(
-          charFrame,
-          [0, 4],
-          [0, 1],
-          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-        );
+        const charOpacity = interpolate(charFrame, [0, 4], [0, 1], {
+          extrapolateLeft: 'clamp',
+          extrapolateRight: 'clamp',
+        });
 
         // グラデーションの場合は文字位置に応じた色を計算
         let charColor = font.color;
@@ -201,9 +202,13 @@ export const Telop: React.FC<TelopProps> = ({ segment }) => {
   const { fps, width } = useVideoConfig();
 
   // テンプレートを取得し、フォーマット別設定で上書き
-  const baseConfig = getTemplateConfig(segment);
-  const animation = getAnimationConfig(segment);
-  const config = {
+  // Phase 3-R (Codex CODEX_RESUME_PHASE3R B4): getTemplateConfig / getAnimationConfig
+  // の return type は telopStyles.ts の literal union だが、Telop.tsx 内では
+  // TelopStyleConfig / TelopAnimationConfig という共通 interface に widening して
+  // optional field (fillGradient / opacity / charDelay 等) を安全 access する。
+  const baseConfig: TelopStyleConfig = getTemplateConfig(segment);
+  const animation: TelopAnimationConfig = getAnimationConfig(segment);
+  const config: TelopStyleConfig = {
     ...baseConfig,
     font: { ...baseConfig.font, size: TELOP_CONFIG.fontSize },
     position: {
@@ -219,7 +224,8 @@ export const Telop: React.FC<TelopProps> = ({ segment }) => {
   const duration = segment.endFrame - segment.startFrame;
 
   // アニメーションなしの場合は常に不透明度1
-  const hasAnimation = animation.fadeInDuration > 0 || animation.fadeOutDuration > 0;
+  const hasAnimation =
+    animation.fadeInDuration > 0 || animation.fadeOutDuration > 0;
 
   // durationが短い場合はフェード時間を調整
   const fadeIn = Math.min(animation.fadeInDuration, duration / 3);
@@ -233,25 +239,30 @@ export const Telop: React.FC<TelopProps> = ({ segment }) => {
         {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
-        }
+        },
       )
     : 1;
 
-  const slideIn = animation.slideInDistance > 0
-    ? spring({
-        frame: localFrame,
-        fps,
-        config: animation.spring,
-      })
-    : 1;
+  const slideIn =
+    animation.slideInDistance > 0
+      ? spring({
+          frame: localFrame,
+          fps,
+          config: animation.spring,
+        })
+      : 1;
 
   // スライド方向に応じてtransformを計算
-  const slideDirection = (animation as any).slideDirection || 'up';
+  const slideDirection = animation.slideDirection || 'up';
   let translateX = 0;
   let translateY = 0;
 
   if (animation.slideInDistance > 0) {
-    const slideValue = interpolate(slideIn, [0, 1], [animation.slideInDistance, 0]);
+    const slideValue = interpolate(
+      slideIn,
+      [0, 1],
+      [animation.slideInDistance, 0],
+    );
     switch (slideDirection) {
       case 'left':
         translateX = -slideValue;
@@ -300,7 +311,13 @@ export const Telop: React.FC<TelopProps> = ({ segment }) => {
             border: background.border,
           }}
         >
-          <div style={{ margin: 0, textAlign: 'center', lineHeight: font.lineHeight }}>
+          <div
+            style={{
+              margin: 0,
+              textAlign: 'center',
+              lineHeight: font.lineHeight,
+            }}
+          >
             <CharByCharText
               text={segment.text}
               localFrame={localFrame}
@@ -317,7 +334,7 @@ export const Telop: React.FC<TelopProps> = ({ segment }) => {
 
   // テンプレート1（背景あり）の場合はCSSベース
   if (background.enabled) {
-    const fillGradient = (font as any).fillGradient;
+    const fillGradient = font.fillGradient;
     const hasFillGradient = fillGradient?.enabled;
 
     // グラデーションテキスト用のスタイル
@@ -373,9 +390,7 @@ export const Telop: React.FC<TelopProps> = ({ segment }) => {
             border: background.border,
           }}
         >
-          <p style={textStyle}>
-            {segment.text}
-          </p>
+          <p style={textStyle}>{segment.text}</p>
         </div>
       </div>
     );
@@ -389,12 +404,18 @@ export const Telop: React.FC<TelopProps> = ({ segment }) => {
   const svgWidth = width;
   const lineHeight = font.size * 1.3; // 行間
   const svgHeight = font.size * 2 + (textLines.length - 1) * lineHeight;
-  const baseY = svgHeight / 2 - ((textLines.length - 1) * lineHeight) / 2 + font.size * 0.35;
+  const baseY =
+    svgHeight / 2 -
+    ((textLines.length - 1) * lineHeight) / 2 +
+    font.size * 0.35;
 
-  const strokeGradient = (textStroke as any).gradient || { start: '#ffffff', end: '#ffffff' };
-  const fillGradient = (font as any).fillGradient;
+  const strokeGradient = textStroke.gradient || {
+    start: '#ffffff',
+    end: '#ffffff',
+  };
+  const fillGradient = font.fillGradient;
   const hasFillGradient = fillGradient?.enabled;
-  const textOpacity = (font as any).opacity ?? 1;
+  const textOpacity = font.opacity ?? 1;
 
   return (
     <div
@@ -422,13 +443,25 @@ export const Telop: React.FC<TelopProps> = ({ segment }) => {
         }}
       >
         <defs>
-          <linearGradient id={strokeGradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+          <linearGradient
+            id={strokeGradientId}
+            x1="0%"
+            y1="0%"
+            x2="100%"
+            y2="0%"
+          >
             <stop offset="0%" stopColor={strokeGradient.start} />
             <stop offset="100%" stopColor={strokeGradient.end} />
           </linearGradient>
 
           {hasFillGradient && (
-            <linearGradient id={fillGradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+            <linearGradient
+              id={fillGradientId}
+              x1="0%"
+              y1="0%"
+              x2="100%"
+              y2="0%"
+            >
               <stop offset="0%" stopColor={fillGradient.start} />
               <stop offset="100%" stopColor={fillGradient.end} />
             </linearGradient>
