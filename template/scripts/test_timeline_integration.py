@@ -15522,6 +15522,48 @@ def test_telop_styles_animation_exports_motion_contract_lint() -> None:
     )
 
 
+def test_telop_styles_template_exports_and_config_helpers_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    styles_file = template_root / "src" / "テロップテンプレート" / "telopStyles.ts"
+    assert styles_file.is_file(), "template/src/テロップテンプレート/telopStyles.ts not found"
+    raw = styles_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    expected_templates = (
+        "template1_gradient",
+        "template2_purpleStroke",
+        "template3_gradientText",
+        "template4_negative",
+        "template4_negative_v2",
+        "template6_whiteGradientText",
+    )
+    blocks: dict[str, str] = {
+        m.group(1): b
+        for b in re.split(r"(?=export const )", text)
+        if (m := re.match(r"export const (template\w+)\s*=\s*\{", b.strip()))
+    }
+    errors: list[str] = []
+    for name in expected_templates:
+        if name not in blocks:
+            errors.append(f"telopStyles.ts: '{name}' export not found")
+            continue
+        block = blocks[name]
+        for field in ("font:", "textShadow:", "textStroke:", "background:", "position:"):
+            if not re.search(rf"\b{re.escape(field)}", block):
+                errors.append(f"{name}: required field '{field}' not found")
+    if not re.search(r"export\s+const\s+subtitleConfig\s*=\s*template3_gradientText\s*;", text):
+        errors.append("telopStyles.ts: 'export const subtitleConfig = template3_gradientText;' not found")
+    if not re.search(r"export\s+const\s+getTextShadowCSS\s*=", text):
+        errors.append("telopStyles.ts: 'export const getTextShadowCSS' not found")
+    if not re.search(r"export\s+const\s+getTextStrokeCSS\s*=", text):
+        errors.append("telopStyles.ts: 'export const getTextStrokeCSS' not found")
+    assert errors == [], (
+        "template/src/テロップテンプレート/telopStyles.ts style template / config helper contract drift:\n"
+        + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15843,6 +15885,7 @@ def main() -> int:
         test_telop_config_types_export_style_shape_and_slide_direction_union,
         test_sound_effect_schema_and_se_data_export_lint,
         test_telop_styles_animation_exports_motion_contract_lint,
+        test_telop_styles_template_exports_and_config_helpers_lint,
     ]
     failed = []
     for t in tests:
