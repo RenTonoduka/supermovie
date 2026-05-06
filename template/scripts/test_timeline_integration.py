@@ -15615,6 +15615,39 @@ def test_slide_data_exports_typed_empty_array_lint() -> None:
     )
 
 
+def test_insert_image_data_typed_export_and_toframe_fps_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    data_file = template_root / "src" / "InsertImage" / "insertImageData.ts"
+    assert data_file.is_file(), "template/src/InsertImage/insertImageData.ts not found"
+    raw = data_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    if not re.search(
+        r"""import\s+(?:type\s+)?\{[^}]*\bImageSegment\b[^}]*\}\s*from\s*['"]\.\/types['"]""",
+        text,
+    ):
+        errors.append("insertImageData.ts: missing import of 'ImageSegment' from './types'")
+    if not re.search(
+        r"""import\s*\{[^}]*\bFPS\b[^}]*\}\s*from\s*['"]\.\.\/videoConfig['"]""",
+        text,
+    ):
+        errors.append("insertImageData.ts: FPS not imported from '../videoConfig'")
+    if not re.search(r"\btoFrame\b", text):
+        errors.append("insertImageData.ts: toFrame helper not found")
+    if not re.search(r"\bMath\.round\s*\(", text):
+        errors.append("insertImageData.ts: Math.round() not used in toFrame — frame calculation must round")
+    if not re.search(r"\btoFrame\s*=\s*[^;]*\bFPS\b", text):
+        errors.append("insertImageData.ts: toFrame definition does not reference FPS — must use FPS from videoConfig")
+    if not re.search(r"export\s+const\s+insertImageData\s*:\s*ImageSegment\[\s*\]", text):
+        errors.append("insertImageData.ts: 'export const insertImageData: ImageSegment[]' not found — must be typed for supermovie-image-gen all-or-nothing rewrite safety")
+    assert errors == [], (
+        "template/src/InsertImage/insertImageData.ts typed export / toFrame contract drift:\n"
+        + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15939,6 +15972,7 @@ def main() -> int:
         test_telop_styles_template_exports_and_config_helpers_lint,
         test_title_segment_schema_and_title_data_typed_export_contract_lint,
         test_slide_data_exports_typed_empty_array_lint,
+        test_insert_image_data_typed_export_and_toframe_fps_contract_lint,
     ]
     failed = []
     for t in tests:
