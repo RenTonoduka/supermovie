@@ -14485,6 +14485,43 @@ def test_tsconfig_compiler_options_contract_lint() -> None:
     )
 
 
+def test_template_src_relative_imports_resolve_lint() -> None:
+    """PR-BT: Relative imports in template/src/**/*.ts(x) must each resolve to an existing file.
+    Catches broken imports (renamed/moved files) before TypeScript compile-time.
+    Strips single-line comment lines before parsing to avoid false positives from commented imports.
+    """
+    import re
+
+    src_root = Path(__file__).parents[1] / "src"
+    EXTENSIONS = [".ts", ".tsx", ".css"]
+    # Match import/export at line start (after stripping comment lines)
+    IMPORT_RE = re.compile(r"""^(?:import|export)[^'"]*['"](\.[^'"]+)['"]""", re.MULTILINE)
+
+    errors: list[str] = []
+    for ts_file in sorted(src_root.rglob("*.ts")) + sorted(src_root.rglob("*.tsx")):
+        content = ts_file.read_text(encoding="utf-8")
+        # Strip single-line comment lines to avoid matching commented-out imports
+        cleaned = "\n".join(
+            line for line in content.splitlines()
+            if not line.lstrip().startswith("//")
+        )
+        for match in IMPORT_RE.finditer(cleaned):
+            spec = match.group(1)
+            if not spec.startswith("."):
+                continue
+            base = (ts_file.parent / spec).resolve()
+            candidates = [base] + [base.with_suffix(ext) for ext in EXTENSIONS]
+            candidates += [base / ("index" + ext) for ext in [".ts", ".tsx"]]
+            if not any(c.is_file() for c in candidates):
+                errors.append(
+                    f"{ts_file.relative_to(src_root.parent.parent)}: unresolved import {spec!r}"
+                )
+
+    assert errors == [], (
+        "Unresolved relative imports in template/src:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14761,6 +14798,8 @@ def main() -> int:
         test_gitignore_required_entries_lint,
         # PR-BS (tsconfig.json compilerOptions contract: strict/jsx/noEmit): 1 件
         test_tsconfig_compiler_options_contract_lint,
+        # PR-BT (relative imports in template/src must resolve to existing files): 1 件
+        test_template_src_relative_imports_resolve_lint,
     ]
     failed = []
     for t in tests:
