@@ -15765,6 +15765,43 @@ def test_se_sequence_wraps_sound_effects_in_sequence_audio_contract_lint() -> No
     )
 
 
+def test_narration_audio_chunks_sequence_wiring_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    audio_file = template_root / "src" / "Narration" / "NarrationAudio.tsx"
+    assert audio_file.is_file(), "template/src/Narration/NarrationAudio.tsx not found"
+    raw = audio_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    remotion_import = re.search(r"""import\s*\{([^}]*)\}\s*from\s*['"]remotion['"]""", text)
+    if not remotion_import:
+        errors.append("NarrationAudio.tsx: no import from 'remotion' found")
+    else:
+        remotion_body = remotion_import.group(1)
+        for sym in ("Audio", "Sequence", "staticFile"):
+            if not re.search(rf"\b{sym}\b", remotion_body):
+                errors.append(f"NarrationAudio.tsx: '{sym}' not imported from 'remotion'")
+    if not re.search(r"""mode\.kind\s*===\s*['"]chunks['"]""", text):
+        errors.append("NarrationAudio.tsx: mode.kind === 'chunks' branch not found")
+    if not re.search(r"\bmode\.segments\.map\s*\(", text):
+        errors.append("NarrationAudio.tsx: mode.segments.map() not found in chunks branch")
+    if not re.search(r"\bkey=\{seg\.id\}", text):
+        errors.append("NarrationAudio.tsx: key={seg.id} not found on <Sequence>")
+    if not re.search(r"\bfrom=\{seg\.startFrame\}", text):
+        errors.append("NarrationAudio.tsx: from={seg.startFrame} not found on <Sequence>")
+    if not re.search(r"\bdurationInFrames=\{seg\.durationInFrames\}", text):
+        errors.append("NarrationAudio.tsx: durationInFrames={seg.durationInFrames} not found — must use segment's actual duration")
+    if not re.search(r"\bsrc=\{staticFile\(seg\.file\)", text):
+        errors.append("NarrationAudio.tsx: src={staticFile(seg.file)} not found — must use staticFile for chunk asset path")
+    if not re.search(r"\bvolume=\{\s*\(\)\s*=>\s*volume\s*\}", text):
+        errors.append("NarrationAudio.tsx: volume={() => volume} not found — must use callback form per Remotion lint rule")
+    assert errors == [], (
+        "template/src/Narration/NarrationAudio.tsx chunks Sequence/Audio wiring contract drift:\n"
+        + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -16094,6 +16131,7 @@ def main() -> int:
         test_image_sequence_wraps_image_segments_in_sequence_frame_ranges_lint,
         test_telop_data_typed_export_and_video_config_ssot_contract_lint,
         test_se_sequence_wraps_sound_effects_in_sequence_audio_contract_lint,
+        test_narration_audio_chunks_sequence_wiring_contract_lint,
     ]
     failed = []
     for t in tests:
