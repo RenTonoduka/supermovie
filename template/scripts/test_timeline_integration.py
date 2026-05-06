@@ -14999,6 +14999,42 @@ def test_text_overlay_telop_config_ssot_contract_lint() -> None:
     )
 
 
+def test_telop_template_registry_file_coverage_lint() -> None:
+    """PR-CM: Every .tsx file in メインテロップ/強調テロップ/ネガティブテロップ dirs must be imported by telopTemplateRegistry.tsx.
+    Guards against new/renamed telop templates existing on disk but unreachable from TelopPlayer registry.
+    Uses pathlib to list .tsx files and re to check import presence in registry (comment lines stripped).
+    """
+    import re
+
+    template_root = Path(__file__).parents[1]
+    registry_path = template_root / "src" / "テロップテンプレート" / "telopTemplateRegistry.tsx"
+    assert registry_path.is_file(), "telopTemplateRegistry.tsx not found"
+    raw = registry_path.read_text(encoding="utf-8")
+    registry_text = "\n".join(
+        line for line in raw.splitlines()
+        if not line.lstrip().startswith("//")
+    )
+
+    TELOP_DIRS = ["メインテロップ", "強調テロップ", "ネガティブテロップ"]
+    errors: list[str] = []
+    for dir_name in TELOP_DIRS:
+        dir_path = template_root / "src" / dir_name
+        if not dir_path.is_dir():
+            errors.append(f"template/src/{dir_name}: directory not found")
+            continue
+        for tsx_file in sorted(dir_path.glob("*.tsx")):
+            stem = tsx_file.stem
+            dir_rel = f"../{dir_name}/{stem}"
+            if not re.search(re.escape(dir_rel), registry_text):
+                errors.append(
+                    f"telopTemplateRegistry.tsx: missing import for '{dir_rel}'"
+                )
+
+    assert errors == [], (
+        "telopTemplateRegistry.tsx file coverage drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15295,6 +15331,7 @@ def main() -> int:
         test_main_video_required_layers_contract_lint,
         test_main_video_narration_mode_ssot_contract_lint,
         test_text_overlay_telop_config_ssot_contract_lint,
+        test_telop_template_registry_file_coverage_lint,
     ]
     failed = []
     for t in tests:
