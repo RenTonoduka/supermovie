@@ -14574,6 +14574,30 @@ def test_eslint_config_no_explicit_any_contract_lint() -> None:
     )
 
 
+def test_remotion_config_contract_lint() -> None:
+    """PR-BW: template/remotion.config.ts must call setVideoImageFormat("jpeg"), setOverwriteOutput(true), overrideWebpackConfig(enableTailwind).
+    Catches removal of Tailwind integration or output format changes that break renders.
+    """
+    import re
+
+    template_root = Path(__file__).parents[1]
+    config_path = template_root / "remotion.config.ts"
+    assert config_path.is_file(), "template/remotion.config.ts not found"
+    text = config_path.read_text(encoding="utf-8")
+    errors: list[str] = []
+    REQUIRED_CALLS = [
+        (r'Config\.setVideoImageFormat\s*\(\s*["\']jpeg["\']\s*\)', 'Config.setVideoImageFormat("jpeg")'),
+        (r'Config\.setOverwriteOutput\s*\(\s*true\s*\)', 'Config.setOverwriteOutput(true)'),
+        (r'Config\.overrideWebpackConfig\s*\(\s*enableTailwind\s*\)', 'Config.overrideWebpackConfig(enableTailwind)'),
+    ]
+    for pattern, description in REQUIRED_CALLS:
+        if not re.search(pattern, text):
+            errors.append(f"remotion.config.ts: missing required call — {description}")
+    assert errors == [], (
+        "template/remotion.config.ts contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14854,6 +14878,7 @@ def main() -> int:
         test_template_src_relative_imports_resolve_lint,
         test_vitest_setup_files_resolve_lint,
         test_eslint_config_no_explicit_any_contract_lint,
+        test_remotion_config_contract_lint,
     ]
     failed = []
     for t in tests:
