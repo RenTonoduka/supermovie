@@ -14281,6 +14281,51 @@ def test_shell_scripts_parse_with_bash_n_lint() -> None:
     assert errors == [], "Shell script syntax lint (bash -n) failed:\n" + "\n".join(errors)
 
 
+def test_repo_root_tracked_paths_allowlist_lint() -> None:
+    """PR-BN: Git-tracked top-level paths must belong to the canonical root allowlist.
+    Catches scratch files or generated outputs accidentally committed at the repo root.
+    Uses git ls-files -z to handle non-ASCII filenames correctly.
+    """
+    import subprocess
+
+    repo_root = Path(__file__).parents[2]
+    CANONICAL_ROOTS = {
+        ".claude-plugin",
+        ".gitignore",
+        "CLAUDE.md",
+        "CONTEXT_ANCHOR.md",
+        "LICENSE",
+        "README.md",
+        "agents.disabled",
+        "docs",
+        "scripts",
+        "skills",
+        "sm-claude.sh",
+        "template",
+    }
+
+    result = subprocess.run(
+        ["git", "ls-files", "-z"],
+        capture_output=True, check=True, cwd=repo_root,
+    )
+    paths = [
+        p.decode("utf-8", errors="surrogateescape")
+        for p in result.stdout.split(b"\x00")
+        if p
+    ]
+
+    unexpected: list[str] = []
+    for path_str in paths:
+        top = path_str.split("/")[0]
+        if top not in CANONICAL_ROOTS:
+            unexpected.append(path_str)
+
+    assert unexpected == [], (
+        "Tracked files outside canonical root allowlist "
+        f"(allowed: {sorted(CANONICAL_ROOTS)}):\n" + "\n".join(unexpected)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14545,6 +14590,8 @@ def main() -> int:
         test_shebang_scripts_are_executable_lint,
         # PR-BM (tracked .sh scripts must parse without error under bash -n): 1 件
         test_shell_scripts_parse_with_bash_n_lint,
+        # PR-BN (git-tracked top-level paths must belong to canonical root allowlist): 1 件
+        test_repo_root_tracked_paths_allowlist_lint,
     ]
     failed = []
     for t in tests:
