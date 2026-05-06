@@ -14124,6 +14124,37 @@ def test_skill_frontmatter_field_order_lint() -> None:
     assert errors == [], "SKILL.md frontmatter field order lint failed:\n" + "\n".join(errors)
 
 
+def test_no_dependency_dirs_committed_lint() -> None:
+    """PR-BH: No dependency/build directories (node_modules, .venv, __pycache__, dist, build)
+    should be committed to git. Checks git-tracked paths only (not filesystem) so gitignored
+    dirs on disk do not cause false positives.
+    """
+    import subprocess
+
+    repo_root = Path(__file__).parents[2]
+    BAD_DIRS = {"node_modules", ".venv", "venv", "__pycache__", ".pytest_cache",
+                ".mypy_cache", "dist", "build", ".tox", ".eggs"}
+
+    result = subprocess.run(
+        ["git", "ls-files"],
+        capture_output=True, text=True, encoding="utf-8", errors="surrogateescape",
+        check=True, cwd=repo_root,
+    )
+    committed_paths = result.stdout.splitlines()
+
+    hits: list[str] = []
+    for path_str in committed_paths:
+        parts = Path(path_str).parts
+        for part in parts[:-1]:  # only check directory components (not the filename itself)
+            if part in BAD_DIRS:
+                hits.append(path_str)
+                break
+
+    assert hits == [], (
+        "Dependency/build directories found in git-tracked files:\n" + "\n".join(hits)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14376,6 +14407,8 @@ def main() -> int:
         test_plugin_json_homepage_repository_canonical_url_lint,
         # PR-BG (SKILL.md frontmatter fields in canonical order: name/description/argument-hint/allowed-tools/effort): 1 件
         test_skill_frontmatter_field_order_lint,
+        # PR-BH (no dependency/build dirs committed to git: node_modules/.venv/__pycache__/dist/build): 1 件
+        test_no_dependency_dirs_committed_lint,
     ]
     failed = []
     for t in tests:
