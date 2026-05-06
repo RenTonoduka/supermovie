@@ -15305,6 +15305,30 @@ def test_narration_mode_invalidate_resets_cached_mode() -> None:
     )
 
 
+def test_template_narration_data_exports_typed_empty_array_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    data_file = template_root / "src" / "Narration" / "narrationData.ts"
+    assert data_file.is_file(), "template/src/Narration/narrationData.ts not found"
+    raw = data_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    if not re.search(
+        r"""import\s+(?:type\s+)?\{[^}]*\bNarrationSegment\b[^}]*\}\s*from\s*['"]\.\/types['"]""",
+        text,
+    ):
+        errors.append("narrationData.ts: missing import of 'NarrationSegment' from './types'")
+    if not re.search(r"export\s+const\s+narrationData\s*:\s*NarrationSegment\[\s*\]", text):
+        errors.append(
+            "narrationData.ts: 'export const narrationData: NarrationSegment[]' not found — "
+            "must be explicitly typed for voicevox_narration.py all-or-nothing rewrite"
+        )
+    assert errors == [], (
+        "template/src/Narration/narrationData.ts typed export contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15618,6 +15642,7 @@ def main() -> int:
         test_slide_uses_sequence_local_frame_without_startframe_offset,
         test_slide_segment_schema_contract_lint,
         test_narration_mode_invalidate_resets_cached_mode,
+        test_template_narration_data_exports_typed_empty_array_lint,
     ]
     failed = []
     for t in tests:
