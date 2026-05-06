@@ -14522,6 +14522,32 @@ def test_template_src_relative_imports_resolve_lint() -> None:
     )
 
 
+def test_vitest_setup_files_resolve_lint() -> None:
+    """PR-BU: vitest.config.ts setupFiles entries must resolve to existing files.
+    Catches renamed/moved setup files that silently break 'npm run test:react'.
+    """
+    import re
+
+    template_root = Path(__file__).parents[1]
+    config_path = template_root / "vitest.config.ts"
+    assert config_path.is_file(), "template/vitest.config.ts not found"
+    text = config_path.read_text(encoding="utf-8")
+    # Extract setupFiles array content: setupFiles: ['...', '...']
+    match = re.search(r"setupFiles\s*:\s*\[([^\]]*)\]", text)
+    assert match, "vitest.config.ts: setupFiles array not found"
+    entries = re.findall(r"""['"]([^'"]+)['"]""", match.group(1))
+    errors: list[str] = []
+    for entry in entries:
+        if not entry.startswith("."):
+            continue
+        resolved = (template_root / entry).resolve()
+        if not resolved.is_file():
+            errors.append(f"setupFiles entry {entry!r} does not resolve to an existing file (looked for: {resolved})")
+    assert errors == [], (
+        "vitest.config.ts setupFiles resolution failed:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14800,6 +14826,7 @@ def main() -> int:
         test_tsconfig_compiler_options_contract_lint,
         # PR-BT (relative imports in template/src must resolve to existing files): 1 件
         test_template_src_relative_imports_resolve_lint,
+        test_vitest_setup_files_resolve_lint,
     ]
     failed = []
     for t in tests:
