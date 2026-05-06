@@ -15260,6 +15260,29 @@ def test_slide_uses_sequence_local_frame_without_startframe_offset() -> None:
     )
 
 
+def test_slide_segment_schema_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    types_file = template_root / "src" / "Slides" / "types.ts"
+    assert types_file.is_file(), "template/src/Slides/types.ts not found"
+    raw = types_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    for field in ("id:", "startFrame:", "endFrame:", "title:"):
+        if not re.search(rf"\b{re.escape(field)}", text):
+            errors.append(f"SlideSegment: required field '{field}' not found")
+    if not re.search(
+        r"videoLayer\??\s*:\s*'visible'\s*\|\s*'dimmed'\s*\|\s*'hidden'", text
+    ):
+        errors.append("SlideSegment: videoLayer must be typed as 'visible' | 'dimmed' | 'hidden'")
+    if not re.search(r"SlideAlignment\s*=\s*'center'\s*\|\s*'left'", text):
+        errors.append("Slides/types.ts: SlideAlignment = 'center' | 'left' type not found")
+    assert errors == [], (
+        "template/src/Slides/types.ts SlideSegment schema contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15571,6 +15594,7 @@ def main() -> int:
         # PR-CT (BGM.tsx uses BGM_FILE constant for both presence check and audio src lint): 1 件
         test_bgm_file_constant_is_single_source_for_presence_check_and_audio_src,
         test_slide_uses_sequence_local_frame_without_startframe_offset,
+        test_slide_segment_schema_contract_lint,
     ]
     failed = []
     for t in tests:
