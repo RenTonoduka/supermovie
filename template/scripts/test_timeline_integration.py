@@ -14957,6 +14957,48 @@ def test_main_video_narration_mode_ssot_contract_lint() -> None:
     )
 
 
+def test_text_overlay_telop_config_ssot_contract_lint() -> None:
+    """PR-CL: Telop.tsx and Title.tsx must import TELOP_CONFIG from videoConfig and use its fields.
+    Guards against hardcoded overlay layout values bypassing the TELOP_CONFIG SSoT.
+    Checks Telop.tsx:fontSize/bottomOffset/maxWidth/containerPadding and Title.tsx:titleTop/titleLeft/titleFontSize.
+    """
+    import re
+
+    template_root = Path(__file__).parents[1]
+    errors: list[str] = []
+
+    def check_file(
+        rel_path: str, required_fields: list[str]
+    ) -> None:
+        file_path = template_root / "src" / rel_path
+        if not file_path.is_file():
+            errors.append(f"{rel_path}: file not found")
+            return
+        raw = file_path.read_text(encoding="utf-8")
+        text = "\n".join(
+            line for line in raw.splitlines()
+            if not line.lstrip().startswith("//")
+        )
+        if not re.search(r"\bimport\b.+\bTELOP_CONFIG\b", text):
+            errors.append(f"{rel_path}: missing import for TELOP_CONFIG")
+        for field in required_fields:
+            if not re.search(rf"\bTELOP_CONFIG\.{re.escape(field)}\b", text):
+                errors.append(f"{rel_path}: TELOP_CONFIG.{field} not referenced")
+
+    check_file(
+        "テロップテンプレート/Telop.tsx",
+        ["fontSize", "bottomOffset", "maxWidth", "containerPadding"],
+    )
+    check_file(
+        "Title/Title.tsx",
+        ["titleTop", "titleLeft", "titleFontSize"],
+    )
+
+    assert errors == [], (
+        "Telop.tsx / Title.tsx TELOP_CONFIG SSoT contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15252,6 +15294,7 @@ def main() -> int:
         test_main_video_staticfile_uses_video_file_lint,
         test_main_video_required_layers_contract_lint,
         test_main_video_narration_mode_ssot_contract_lint,
+        test_text_overlay_telop_config_ssot_contract_lint,
     ]
     failed = []
     for t in tests:
