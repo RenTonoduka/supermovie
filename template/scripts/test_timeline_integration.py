@@ -14194,6 +14194,27 @@ def test_plugin_json_top_level_key_order_lint() -> None:
     )
 
 
+def test_marketplace_json_name_derives_from_plugin_name_lint() -> None:
+    """PR-BK: marketplace.json top-level 'name' must equal '{plugin_name}-marketplace'
+    where plugin_name comes from plugin.json. Complements PR-BI (keyset) and PR-AY
+    (owner/version mirror) by enforcing the top-level name derivation convention.
+    """
+    import json
+
+    repo_root = Path(__file__).parents[2]
+    plugin_name = json.loads(
+        (repo_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+    ).get("name", "")
+    market_name = json.loads(
+        (repo_root / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8")
+    ).get("name", "")
+    expected = f"{plugin_name}-marketplace"
+    assert market_name == expected, (
+        f"marketplace.json name {market_name!r} != expected {expected!r} "
+        f"(must be {{plugin_name}}-marketplace)"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14452,6 +14473,8 @@ def main() -> int:
         test_marketplace_json_top_level_keyset_lint,
         # PR-BJ (plugin.json top-level key canonical order: name/description/version/author/homepage/repository/license/keywords/skills): 1 件
         test_plugin_json_top_level_key_order_lint,
+        # PR-BK (marketplace.json top-level name == '{plugin_name}-marketplace' derivation): 1 件
+        test_marketplace_json_name_derives_from_plugin_name_lint,
     ]
     failed = []
     for t in tests:
