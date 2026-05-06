@@ -15443,6 +15443,39 @@ def test_telop_config_types_export_style_shape_and_slide_direction_union() -> No
     )
 
 
+def test_sound_effect_schema_and_se_data_export_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    # SEPlayer.ts — SoundEffect type definition
+    se_player = template_root / "src" / "SoundEffects" / "SEPlayer.ts"
+    assert se_player.is_file(), "template/src/SoundEffects/SEPlayer.ts not found"
+    raw_player = se_player.read_text(encoding="utf-8")
+    player_text = "\n".join(line for line in raw_player.splitlines() if not line.lstrip().startswith("//"))
+    player_text = re.sub(r"/\*.*?\*/", "", player_text, flags=re.DOTALL)
+    # seData.ts — typed export
+    se_data_file = template_root / "src" / "SoundEffects" / "seData.ts"
+    assert se_data_file.is_file(), "template/src/SoundEffects/seData.ts not found"
+    raw_data = se_data_file.read_text(encoding="utf-8")
+    data_text = "\n".join(line for line in raw_data.splitlines() if not line.lstrip().startswith("//"))
+    data_text = re.sub(r"/\*.*?\*/", "", data_text, flags=re.DOTALL)
+    errors: list[str] = []
+    for field, typ in (("id", "number"), ("startFrame", "number"), ("file", "string")):
+        if not re.search(rf"\b{field}\s*:\s*{typ}\b", player_text):
+            errors.append(f"SoundEffect: required field '{field}: {typ}' not found in SEPlayer.ts")
+    if not re.search(r"\bvolume\??\s*:\s*number\b", player_text):
+        errors.append("SoundEffect: optional 'volume?: number' not found in SEPlayer.ts")
+    if not re.search(
+        r"""import\s+(?:type\s+)?\{[^}]*\bSoundEffect\b[^}]*\}\s*from\s*['"]\.\/SEPlayer['"]""",
+        data_text,
+    ):
+        errors.append("seData.ts: missing import of 'SoundEffect' from './SEPlayer'")
+    if not re.search(r"export\s+const\s+seData\s*:\s*SoundEffect\[\s*\]", data_text):
+        errors.append("seData.ts: 'export const seData: SoundEffect[]' not found")
+    assert errors == [], (
+        "SoundEffect schema / seData export contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15762,6 +15795,7 @@ def main() -> int:
         test_title_data_toframe_uses_video_config_fps_lint,
         test_telop_segment_schema_contract_lint,
         test_telop_config_types_export_style_shape_and_slide_direction_union,
+        test_sound_effect_schema_and_se_data_export_lint,
     ]
     failed = []
     for t in tests:
