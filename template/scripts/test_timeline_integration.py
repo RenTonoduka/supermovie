@@ -14852,6 +14852,37 @@ def test_root_composition_uses_video_config_lint() -> None:
     )
 
 
+def test_main_video_staticfile_uses_video_file_lint() -> None:
+    """PR-CI: MainVideo.tsx must import VIDEO_FILE from ./videoConfig and use staticFile(VIDEO_FILE).
+    Tightens the existing import-only lint; verifies the base video source actually flows through SSoT.
+    Guards against VIDEO_FILE import being present but bypassed with a hardcoded string literal.
+    """
+    import re
+
+    template_root = Path(__file__).parents[1]
+    main_video = template_root / "src" / "MainVideo.tsx"
+    assert main_video.is_file(), "template/src/MainVideo.tsx not found"
+    raw = main_video.read_text(encoding="utf-8")
+    # Strip single-line comments to avoid matching commented-out code
+    text = "\n".join(
+        line for line in raw.splitlines()
+        if not line.lstrip().startswith("//")
+    )
+
+    import_line = re.search(
+        r"""import\s*\{([^}]+)\}\s*from\s*['"]\.\/videoConfig['"]""", text
+    )
+    assert import_line, "MainVideo.tsx: no named import block from './videoConfig' (non-comment lines)"
+    imported = [n.strip() for n in import_line.group(1).split(",")]
+    assert "VIDEO_FILE" in imported, (
+        f"MainVideo.tsx: 'VIDEO_FILE' not imported from './videoConfig' (got: {imported})"
+    )
+
+    assert re.search(r"staticFile\s*\(\s*VIDEO_FILE\s*\)", text), (
+        "MainVideo.tsx: staticFile(VIDEO_FILE) not found — base video source must use videoConfig SSoT"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15144,6 +15175,7 @@ def main() -> int:
         test_sm_claude_entrypoint_executable_lint,
         test_template_css_entrypoint_side_effects_lint,
         test_root_composition_uses_video_config_lint,
+        test_main_video_staticfile_uses_video_file_lint,
     ]
     failed = []
     for t in tests:
