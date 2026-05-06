@@ -14810,6 +14810,48 @@ def test_template_css_entrypoint_side_effects_lint() -> None:
     )
 
 
+def test_root_composition_uses_video_config_lint() -> None:
+    """PR-CH: Root.tsx must import FPS/SOURCE_DURATION_FRAMES/RESOLUTION from ./videoConfig
+    and wire them into <Composition fps/durationInFrames/width/height>.
+    Guards against hardcoded render dimensions/timing that bypass the videoConfig SSoT.
+    """
+    import re
+
+    template_root = Path(__file__).parents[1]
+    root_tsx = template_root / "src" / "Root.tsx"
+    assert root_tsx.is_file(), "template/src/Root.tsx not found"
+    raw = root_tsx.read_text(encoding="utf-8")
+    # Strip single-line comments so regex cannot match commented-out code
+    text = "\n".join(
+        line for line in raw.splitlines()
+        if not line.lstrip().startswith("//")
+    )
+
+    import_line = re.search(
+        r"""import\s*\{([^}]+)\}\s*from\s*['"]\.\/videoConfig['"]""", text
+    )
+    assert import_line, "Root.tsx: no named import block from './videoConfig' (non-comment lines)"
+    imported = [n.strip() for n in import_line.group(1).split(",")]
+    REQUIRED_NAMES = ["FPS", "SOURCE_DURATION_FRAMES", "RESOLUTION"]
+    missing_imports = [n for n in REQUIRED_NAMES if n not in imported]
+    assert not missing_imports, (
+        f"Root.tsx: missing imports from videoConfig: {missing_imports}"
+    )
+
+    errors: list[str] = []
+    for pattern, desc in [
+        (r"fps\s*=\s*\{FPS\}", "fps={FPS}"),
+        (r"durationInFrames\s*=\s*\{SOURCE_DURATION_FRAMES\}", "durationInFrames={SOURCE_DURATION_FRAMES}"),
+        (r"width\s*=\s*\{RESOLUTION\.width\}", "width={RESOLUTION.width}"),
+        (r"height\s*=\s*\{RESOLUTION\.height\}", "height={RESOLUTION.height}"),
+    ]:
+        if not re.search(pattern, text):
+            errors.append(f"Root.tsx <Composition>: missing prop — {desc}")
+    assert errors == [], (
+        "template/src/Root.tsx Composition SSoT contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15101,6 +15143,7 @@ def main() -> int:
         test_scripts_required_files_executable_lint,
         test_sm_claude_entrypoint_executable_lint,
         test_template_css_entrypoint_side_effects_lint,
+        test_root_composition_uses_video_config_lint,
     ]
     failed = []
     for t in tests:
