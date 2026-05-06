@@ -14215,6 +14215,45 @@ def test_marketplace_json_name_derives_from_plugin_name_lint() -> None:
     )
 
 
+def test_shebang_scripts_are_executable_lint() -> None:
+    """PR-BL: Git-tracked shell scripts (.sh) with a shebang (#!) on line 1 must have
+    mode 100755 in the git index. Shell scripts are always invoked directly; a non-
+    executable .sh file cannot run without an explicit 'bash' prefix after clone.
+    Python/JS scripts are invoked via interpreter and are excluded from this check.
+    """
+    import subprocess
+
+    repo_root = Path(__file__).parents[2]
+    result = subprocess.run(
+        ["git", "ls-files", "-s"],
+        capture_output=True, text=True, encoding="utf-8", errors="surrogateescape",
+        check=True, cwd=repo_root,
+    )
+
+    bad: list[str] = []
+    for line in result.stdout.splitlines():
+        parts = line.split(None, 3)
+        if len(parts) != 4:
+            continue
+        mode, _sha, _stage, path = parts
+        if not path.endswith(".sh"):
+            continue
+        fpath = repo_root / path
+        if not fpath.is_file():
+            continue
+        try:
+            first_bytes = fpath.read_bytes()[:2]
+        except OSError:
+            continue
+        if first_bytes == b"#!" and mode != "100755":
+            bad.append(f"{path} (mode={mode}, expected 100755)")
+
+    assert bad == [], (
+        "Shell scripts (.sh) with shebang must be git-executable (mode 100755):\n"
+        + "\n".join(bad)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14475,6 +14514,8 @@ def main() -> int:
         test_plugin_json_top_level_key_order_lint,
         # PR-BK (marketplace.json top-level name == '{plugin_name}-marketplace' derivation): 1 件
         test_marketplace_json_name_derives_from_plugin_name_lint,
+        # PR-BL (shebang scripts in git index must have mode 100755): 1 件
+        test_shebang_scripts_are_executable_lint,
     ]
     failed = []
     for t in tests:
