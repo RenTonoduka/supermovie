@@ -15840,6 +15840,30 @@ def test_narration_mode_priority_dispatch_contract_lint() -> None:
     )
 
 
+def test_narration_audio_legacy_branch_wiring_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    audio_file = template_root / "src" / "Narration" / "NarrationAudio.tsx"
+    assert audio_file.is_file(), "template/src/Narration/NarrationAudio.tsx not found"
+    raw = audio_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    if not re.search(
+        r"""mode\.kind\s*===\s*['"]legacy['"][^;]*?staticFile\s*\(\s*mode\.file\s*\)[^;]*?volume=\{\s*\(\)\s*=>\s*volume\s*\}""",
+        text,
+        re.DOTALL,
+    ):
+        errors.append(
+            "NarrationAudio.tsx: legacy branch must contain both staticFile(mode.file) and "
+            "volume={() => volume} within the same mode.kind==='legacy' branch"
+        )
+    assert errors == [], (
+        "template/src/Narration/NarrationAudio.tsx legacy branch wiring contract drift:\n"
+        + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -16171,6 +16195,7 @@ def main() -> int:
         test_se_sequence_wraps_sound_effects_in_sequence_audio_contract_lint,
         test_narration_audio_chunks_sequence_wiring_contract_lint,
         test_narration_mode_priority_dispatch_contract_lint,
+        test_narration_audio_legacy_branch_wiring_contract_lint,
     ]
     failed = []
     for t in tests:
