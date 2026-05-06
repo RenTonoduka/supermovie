@@ -14747,6 +14747,31 @@ def test_main_video_imports_video_config_lint() -> None:
     )
 
 
+def test_scripts_required_files_executable_lint() -> None:
+    """PR-CE: scripts/ must contain check_release_ready.sh and regen_phase3_progress.sh, both executable.
+    Catches release/preflight drift where automation scripts are missing or lose execute permissions.
+    """
+    import os
+
+    repo_root = Path(__file__).parents[2]
+    scripts_root = repo_root / "scripts"
+    assert scripts_root.is_dir(), "scripts/ directory not found in repo root"
+    REQUIRED_SCRIPTS = [
+        "check_release_ready.sh",
+        "regen_phase3_progress.sh",
+    ]
+    errors: list[str] = []
+    for name in REQUIRED_SCRIPTS:
+        path = scripts_root / name
+        if not path.is_file():
+            errors.append(f"scripts/{name}: file not found")
+        elif not os.access(path, os.X_OK):
+            errors.append(f"scripts/{name}: not executable (missing +x permission)")
+    assert errors == [], (
+        "scripts/ required file check failed:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15035,6 +15060,7 @@ def main() -> int:
         test_docs_required_files_present_lint,
         test_context_anchor_required_sections_lint,
         test_main_video_imports_video_config_lint,
+        test_scripts_required_files_executable_lint,
     ]
     failed = []
     for t in tests:
