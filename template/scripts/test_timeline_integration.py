@@ -15802,6 +15802,44 @@ def test_narration_audio_chunks_sequence_wiring_contract_lint() -> None:
     )
 
 
+def test_narration_mode_priority_dispatch_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    mode_file = template_root / "src" / "Narration" / "mode.ts"
+    assert mode_file.is_file(), "template/src/Narration/mode.ts not found"
+    raw = mode_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    for kind in ("chunks", "legacy", "none"):
+        if not re.search(rf"""kind\s*:\s*['"]{kind}['"]""", text):
+            errors.append(f"mode.ts: NarrationMode discriminant '{kind}' not found")
+    if not re.search(r"segments\s*:\s*readonly\s+NarrationSegment", text):
+        errors.append("mode.ts: NarrationMode 'chunks' shape missing 'segments: readonly NarrationSegment[]'")
+    if not re.search(r"""\bfile\s*:\s*string\b""", text):
+        errors.append("mode.ts: NarrationMode 'legacy' shape missing 'file: string'")
+    m_chunks_guard = re.search(r"\bnarrationData\.length\s*>\s*0\b", text)
+    if not m_chunks_guard:
+        errors.append("mode.ts: getNarrationMode missing 'narrationData.length > 0' guard — chunks must require non-empty data")
+    if not re.search(r"\bnarrationData\.every\s*\(", text):
+        errors.append("mode.ts: getNarrationMode missing 'narrationData.every()' — chunks requires all files exist")
+    if not re.search(r"""kind\s*:\s*['"]chunks['"]\s*,\s*segments\s*:\s*narrationData""", text):
+        errors.append("mode.ts: chunks mode assignment must use '{ kind: \"chunks\", segments: narrationData }'")
+    m_legacy_check = re.search(r"\bnames\.has\s*\(\s*NARRATION_LEGACY_FILE\s*\)", text)
+    if not m_legacy_check:
+        errors.append("mode.ts: legacy fallback must check 'names.has(NARRATION_LEGACY_FILE)'")
+    m_none_fallback = re.search(r"""_modeCache\s*=\s*\{\s*kind\s*:\s*['"]none['"]\s*\}""", text)
+    if not m_none_fallback:
+        errors.append("mode.ts: final fallback '_modeCache = { kind: \"none\" }' assignment not found")
+    if m_chunks_guard and m_legacy_check and m_none_fallback:
+        if not (m_chunks_guard.start() < m_legacy_check.start() < m_none_fallback.start()):
+            errors.append("mode.ts: priority dispatch order must be chunks guard → legacy check → none fallback")
+    assert errors == [], (
+        "template/src/Narration/mode.ts NarrationMode union / priority dispatch contract drift:\n"
+        + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -16132,6 +16170,7 @@ def main() -> int:
         test_telop_data_typed_export_and_video_config_ssot_contract_lint,
         test_se_sequence_wraps_sound_effects_in_sequence_audio_contract_lint,
         test_narration_audio_chunks_sequence_wiring_contract_lint,
+        test_narration_mode_priority_dispatch_contract_lint,
     ]
     failed = []
     for t in tests:
