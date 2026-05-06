@@ -14175,6 +14175,25 @@ def test_marketplace_json_top_level_keyset_lint() -> None:
     )
 
 
+def test_plugin_json_top_level_key_order_lint() -> None:
+    """PR-BJ: plugin.json top-level keys must appear in canonical order:
+    name, description, version, author, homepage, repository, license, keywords, skills.
+    Complements PR-AV (key-set) by also enforcing insertion order for diff stability.
+    """
+    import json
+
+    repo_root = Path(__file__).parents[2]
+    text = (repo_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+    keys = list(json.loads(text).keys())
+    expected = [
+        "name", "description", "version", "author",
+        "homepage", "repository", "license", "keywords", "skills",
+    ]
+    assert keys == expected, (
+        f"plugin.json top-level key order mismatch: expected={expected}, got={keys}"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14431,6 +14450,8 @@ def main() -> int:
         test_no_dependency_dirs_committed_lint,
         # PR-BI (marketplace.json top-level key-set exact: {name, owner, metadata, plugins}): 1 件
         test_marketplace_json_top_level_keyset_lint,
+        # PR-BJ (plugin.json top-level key canonical order: name/description/version/author/homepage/repository/license/keywords/skills): 1 件
+        test_plugin_json_top_level_key_order_lint,
     ]
     failed = []
     for t in tests:
