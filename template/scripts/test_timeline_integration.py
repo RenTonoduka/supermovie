@@ -15397,6 +15397,31 @@ def test_title_data_toframe_uses_video_config_fps_lint() -> None:
     )
 
 
+def test_telop_segment_schema_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    types_file = template_root / "src" / "テロップテンプレート" / "telopTypes.ts"
+    assert types_file.is_file(), "template/src/テロップテンプレート/telopTypes.ts not found"
+    raw = types_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    for field, typ in (("id", "number"), ("startFrame", "number"), ("endFrame", "number"), ("text", "string")):
+        if not re.search(rf"\b{field}\s*:\s*{typ}\b", text):
+            errors.append(f"TelopSegment: required field '{field}: {typ}' not found")
+    if not re.search(
+        r"style\??\s*:\s*'normal'\s*\|\s*'emphasis'\s*\|\s*'warning'\s*\|\s*'success'", text
+    ):
+        errors.append("TelopSegment: style union 'normal'|'emphasis'|'warning'|'success' not found")
+    if not re.search(r"template\??\s*:\s*1\s*\|.*\b6\b", text):
+        errors.append("TelopSegment: template union 1|2|3|4|5|6 not found")
+    if not re.search(r"templateId\??\s*:\s*TelopTemplateId\b", text):
+        errors.append("TelopSegment: templateId?: TelopTemplateId not found")
+    assert errors == [], (
+        "template/src/テロップテンプレート/telopTypes.ts TelopSegment schema contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15714,6 +15739,7 @@ def main() -> int:
         test_insert_image_segment_schema_contract_lint,
         test_narration_segment_required_fields_contract_lint,
         test_title_data_toframe_uses_video_config_fps_lint,
+        test_telop_segment_schema_contract_lint,
     ]
     failed = []
     for t in tests:
