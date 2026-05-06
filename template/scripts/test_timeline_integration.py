@@ -14919,6 +14919,44 @@ def test_main_video_required_layers_contract_lint() -> None:
     )
 
 
+def test_main_video_narration_mode_ssot_contract_lint() -> None:
+    """PR-CK: MainVideo.tsx must call useNarrationMode(), derive baseVolume from narrationMode.kind,
+    bind volume={() => baseVolume} on the base Video, and pass mode={narrationMode} to NarrationAudioWithMode.
+    Guards against narration mode SSoT being bypassed with hardcoded volume or missing hook wiring.
+    """
+    import re
+
+    template_root = Path(__file__).parents[1]
+    main_video = template_root / "src" / "MainVideo.tsx"
+    assert main_video.is_file(), "template/src/MainVideo.tsx not found"
+    raw = main_video.read_text(encoding="utf-8")
+    text = "\n".join(
+        line for line in raw.splitlines()
+        if not line.lstrip().startswith("//")
+    )
+
+    errors: list[str] = []
+
+    if not re.search(r"\bimport\b.+\buseNarrationMode\b", text):
+        errors.append("MainVideo.tsx: missing import for 'useNarrationMode'")
+
+    if not re.search(r"\buseNarrationMode\s*\(\s*\)", text):
+        errors.append("MainVideo.tsx: useNarrationMode() hook call not found")
+
+    if not re.search(r"\bnarrationMode\.kind\b", text):
+        errors.append("MainVideo.tsx: narrationMode.kind not referenced (SSoT bypass risk)")
+
+    if not re.search(r"volume\s*=\s*\{\s*\(\s*\)\s*=>\s*baseVolume\s*\}", text):
+        errors.append("MainVideo.tsx: volume={() => baseVolume} not found on base Video")
+
+    if not re.search(r"mode\s*=\s*\{\s*narrationMode\s*\}", text):
+        errors.append("MainVideo.tsx: mode={narrationMode} not passed to NarrationAudioWithMode")
+
+    assert errors == [], (
+        "template/src/MainVideo.tsx narration mode SSoT contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15213,6 +15251,7 @@ def main() -> int:
         test_root_composition_uses_video_config_lint,
         test_main_video_staticfile_uses_video_file_lint,
         test_main_video_required_layers_contract_lint,
+        test_main_video_narration_mode_ssot_contract_lint,
     ]
     failed = []
     for t in tests:
