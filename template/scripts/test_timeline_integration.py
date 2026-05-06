@@ -15352,6 +15352,27 @@ def test_insert_image_segment_schema_contract_lint() -> None:
     )
 
 
+def test_narration_segment_required_fields_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    types_file = template_root / "src" / "Narration" / "types.ts"
+    assert types_file.is_file(), "template/src/Narration/types.ts not found"
+    raw = types_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    # Each required field must appear without '?' before ':'
+    for field, typ in (("id", "number"), ("startFrame", "number"), ("durationInFrames", "number"), ("file", "string")):
+        if not re.search(rf"\b{field}\s*:\s*{typ}\b", text):
+            errors.append(
+                f"NarrationSegment: required field '{field}: {typ}' not found "
+                f"(must be non-optional for voicevox_narration.py Sequence timing)"
+            )
+    assert errors == [], (
+        "template/src/Narration/types.ts NarrationSegment required fields contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15667,6 +15688,7 @@ def main() -> int:
         test_narration_mode_invalidate_resets_cached_mode,
         test_template_narration_data_exports_typed_empty_array_lint,
         test_insert_image_segment_schema_contract_lint,
+        test_narration_segment_required_fields_contract_lint,
     ]
     failed = []
     for t in tests:
