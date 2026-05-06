@@ -3,7 +3,7 @@
 ## 正規ワークフロー（必ずこの順序で実行）
 
 ```
-/supermovie-init              ← ヒアリング → プロジェクト作成
+/supermovie-init              ← ヒアリング → プロジェクト作成 + preflight_video.py
     ↓ project-config.json
 /supermovie-transcribe        ← 文字起こし（ローカルWhisper or AssemblyAI）
     ↓ transcript.json
@@ -13,12 +13,17 @@
 /supermovie-cut               ← 不要区間カット（VAD + LLM分析）
     ↓ cutData.ts
 /supermovie-subtitles         ← transcript_fixed.json → telopData.ts + titleData.ts
+    ↓                          (BudouX 意味分割 + 30 templates registry)
+/supermovie-slides            ← Phase 3-A/B/C: SlideSequence + slideData.ts
+    ↓                          (deterministic / optional Anthropic LLM plan)
+/supermovie-narration         ← Phase 3-D: VOICEVOX → public/narration.wav
+    ↓                          (engine 不在で skip、--require-engine で fail)
+/supermovie-image-gen         ← テロップ分析 → 画像生成 + insertImageData.ts (Roku 課金判断)
     ↓
-/supermovie-image-gen         ← テロップ分析 → 画像生成 + insertImageData.ts
-    ↓
-/supermovie-se                ← telopData.ts + insertImageData.ts → seData.ts
+/supermovie-se                ← telopData.ts + insertImageData.ts → seData.ts (Roku 素材判断)
     ↓
 npm run dev                   ← Remotion Studioプレビュー
+npm run render                ← out/video.mp4 出力
 ```
 
 ## 動画フォーマット定義
@@ -81,6 +86,42 @@ python scripts/run.py api_generator.py --prompt "説明図" -a 16:9
   "bgmMood": "アップテンポ",
   "notes": "テンポ重視、キーワード「AI」を強調",
   "createdAt": "2026-03-25",
+  "source": {
+    "video": "main.mp4",
+    "raw": { "width": 3840, "height": 2160 },
+    "display": { "width": 2160, "height": 3840 },
+    "rotation": { "raw": -90, "normalized": -90, "source": "Display Matrix" },
+    "aspect": 0.5625,
+    "sar": "1:1",
+    "dar": null,
+    "inferred_format": "short",
+    "chosen_format": "short",
+    "fps": {
+      "r_frame_rate": "60/1",
+      "avg_frame_rate": "503200/8387",
+      "render_fps": 60,
+      "vfr_metadata_suspect": false
+    },
+    "duration_sec": 41.93,
+    "duration_frames": 2516,
+    "codec": {
+      "name": "hevc",
+      "profile": "Main 10",
+      "pix_fmt": "yuv420p10le",
+      "field_order": "progressive"
+    },
+    "color": {
+      "range": "tv",
+      "space": "bt2020nc",
+      "transfer": "arib-std-b67",
+      "primaries": "bt2020",
+      "hdr_suspect": true,
+      "dovi": { "dv_profile": 8, "dv_level": 9 }
+    },
+    "streams": { "video": 1, "audio": 1, "subtitle": 0, "data": 5 },
+    "risks": ["hdr-or-dovi", "10bit"],
+    "requiresConfirmation": true
+  },
   "transcribe": {
     "os": "darwin-arm64",
     "engine": "mlx-whisper",
@@ -90,6 +131,13 @@ python scripts/run.py api_generator.py --prompt "説明図" -a 16:9
   }
 }
 ```
+
+**source.* schema は `template/scripts/preflight_video.py` が自動生成する。手書きで埋めない。**
+
+**risks キー一覧** (Phase 2 罠ガードと一致):
+`rotation-non-canonical` / `non-square-sar` / `unknown-aspect` / `vfr` / `hdr-or-dovi` / `10bit` / `interlaced` / `multiple-or-missing-video` / `multiple-or-missing-audio` / `embedded-subtitle`
+
+`requiresConfirmation: true` の場合は Roku に risks 内容を提示してから次 phase に進む。
 
 ### transcript.json / transcript_fixed.json
 
@@ -198,7 +246,8 @@ type SoundEffect = {
 | 動画設定（SSoT） | `<PROJECT>/src/videoConfig.ts` |
 | ベース動画 | `<PROJECT>/public/main.mp4` |
 | SE素材 | `<PROJECT>/public/se/` |
-| BGM素材 | `<PROJECT>/public/BGM/` |
+| BGM 本体 (asset gate) | `<PROJECT>/public/BGM/bgm.mp3` |
+| ナレーション本体 (asset gate) | `<PROJECT>/public/narration.wav` |
 | 挿入画像（手動配置） | `<PROJECT>/public/images/` |
 | 挿入画像（AI生成） | `<PROJECT>/public/images/generated/` |
 | Python仮想環境 | `<PROJECT>/.venv/` |
@@ -214,6 +263,36 @@ type SoundEffect = {
 | `テロップテンプレート/` | Subtitles/ |
 | `transcript_fixed.json` | transcript_corrected.json |
 | `transcript_audio.wav` | /tmp/supermovie_audio.wav |
+
+## Visual Smoke + Timeline Test (Phase 3-G/J/K、品質ゲート)
+
+```bash
+cd <PROJECT>
+npm run visual-smoke   # Phase 3-G: 3 format × 2 frame の still + ffprobe + grid
+npm run test:timeline  # Phase 3-K: pure python timeline integration test
+                       #   (timeline.py + collect_chunks + write_narration_data の連鎖検証)
+npm run test           # lint + timeline integration を一気に (visual-smoke は別運用)
+```
+
+`scripts/test_timeline_integration.py` は engine / node_modules / main.mp4
+不要で動く pure python テスト (`timeline.py` の前提が壊れたら fail)、CI で
+高頻度実行可。`visual-smoke` は実 project (main.mp4 + node_modules) 前提
+なので別運用。
+
+
+`scripts/visual_smoke.py` は `videoConfig.ts` の `FORMAT` を try/finally で
+youtube → short → square と切替て `npx remotion still` を 2 frame ずつ生成、
+各 PNG を ffprobe で検証する:
+
+| format | 期待 dimension |
+|--------|---------------|
+| youtube | 1920 × 1080 |
+| short   | 1080 × 1920 |
+| square  | 1080 × 1080 |
+
+mismatch 1 件以上で exit 2 (regression 即検知)。`out/visual_smoke/grid.png` で
+6 cell の目視レビュー、`summary.json` で機械可読なパス/失敗統計。
+原本 `videoConfig.ts` は finally で必ず復元される (途中 fail 安全)。
 
 ## アップデート手順
 
