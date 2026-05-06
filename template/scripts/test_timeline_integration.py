@@ -14155,6 +14155,26 @@ def test_no_dependency_dirs_committed_lint() -> None:
     )
 
 
+def test_marketplace_json_top_level_keyset_lint() -> None:
+    """PR-BI: marketplace.json top-level key set must be exactly
+    {name, owner, metadata, plugins} — no missing, no extra keys.
+    Complements PR-AY (owner/version mirror) and PR-AZ (plugins[] shape)
+    without duplicating either.
+    """
+    import json
+
+    repo_root = Path(__file__).parents[2]
+    market = json.loads(
+        (repo_root / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8")
+    )
+    expected = {"name", "owner", "metadata", "plugins"}
+    actual = set(market)
+    assert actual == expected, (
+        f"marketplace.json top-level keys mismatch: "
+        f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14409,6 +14429,8 @@ def main() -> int:
         test_skill_frontmatter_field_order_lint,
         # PR-BH (no dependency/build dirs committed to git: node_modules/.venv/__pycache__/dist/build): 1 件
         test_no_dependency_dirs_committed_lint,
+        # PR-BI (marketplace.json top-level key-set exact: {name, owner, metadata, plugins}): 1 件
+        test_marketplace_json_top_level_keyset_lint,
     ]
     failed = []
     for t in tests:
