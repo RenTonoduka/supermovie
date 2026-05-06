@@ -15186,6 +15186,30 @@ def test_narration_audio_with_mode_is_pure_mode_prop_renderer() -> None:
     )
 
 
+def test_entrypoint_registers_remotion_root() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    index_ts = template_root / "src" / "index.ts"
+    assert index_ts.is_file(), "template/src/index.ts not found"
+    raw = index_ts.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    errors: list[str] = []
+    import_match = re.search(
+        r"""import\s*\{([^}]+)\}\s*from\s*['"]\.\/Root['"]""", text
+    )
+    if not import_match:
+        errors.append("index.ts: no named import from './Root'")
+    else:
+        imported = [n.strip() for n in import_match.group(1).split(",")]
+        if "RemotionRoot" not in imported:
+            errors.append(f"index.ts: 'RemotionRoot' not imported from './Root' (got: {imported})")
+    if not re.search(r"\bregisterRoot\s*\(\s*RemotionRoot\s*\)", text):
+        errors.append("index.ts: registerRoot(RemotionRoot) not found — Remotion entrypoint contract broken")
+    assert errors == [], (
+        "template/src/index.ts Remotion entrypoint contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15492,6 +15516,8 @@ def main() -> int:
         test_narration_watch_uses_mode_constants_and_data_files,
         # PR-CR (NarrationAudioWithMode is pure mode-prop renderer, no internal hook call lint): 1 件
         test_narration_audio_with_mode_is_pure_mode_prop_renderer,
+        # PR-CS (index.ts imports RemotionRoot and calls registerRoot lint): 1 件
+        test_entrypoint_registers_remotion_root,
     ]
     failed = []
     for t in tests:
