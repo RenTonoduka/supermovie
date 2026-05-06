@@ -14458,6 +14458,33 @@ def test_gitignore_required_entries_lint() -> None:
     )
 
 
+def test_tsconfig_compiler_options_contract_lint() -> None:
+    """PR-BS: template/tsconfig.json compilerOptions must contain required TypeScript settings.
+    Catches accidental relaxation of strict/jsx/module settings that would weaken type safety.
+    """
+    import json
+
+    template_root = Path(__file__).parents[1]
+    tsconfig = json.loads((template_root / "tsconfig.json").read_text(encoding="utf-8"))
+    compiler_options = tsconfig.get("compilerOptions", {})
+    assert compiler_options, "template/tsconfig.json: compilerOptions not found"
+
+    REQUIRED = {
+        "strict": True,
+        "jsx": "react-jsx",
+        "noEmit": True,
+    }
+
+    errors = [
+        f"compilerOptions.{key}: expected {expected!r}, got {compiler_options.get(key)!r}"
+        for key, expected in REQUIRED.items()
+        if compiler_options.get(key) != expected
+    ]
+    assert errors == [], (
+        "template/tsconfig.json compilerOptions contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14732,6 +14759,8 @@ def main() -> int:
         test_package_json_test_timeline_script_path_resolves_lint,
         # PR-BR (.gitignore must contain required entries for deps/secrets/artifacts): 1 件
         test_gitignore_required_entries_lint,
+        # PR-BS (tsconfig.json compilerOptions contract: strict/jsx/noEmit): 1 件
+        test_tsconfig_compiler_options_contract_lint,
     ]
     failed = []
     for t in tests:
