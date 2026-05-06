@@ -14643,6 +14643,28 @@ def test_videoconfig_required_exports_present_lint() -> None:
     )
 
 
+def test_package_json_identity_contract_lint() -> None:
+    """PR-BZ: template/package.json must have private=true, license=UNLICENSED, non-empty name/version.
+    Catches accidental publishability or malformed identity fields that break package managers.
+    """
+    import json
+
+    template_root = Path(__file__).parents[1]
+    pkg = json.loads((template_root / "package.json").read_text(encoding="utf-8"))
+    errors: list[str] = []
+    if pkg.get("private") is not True:
+        errors.append(f'package.json: "private" must be true, got {pkg.get("private")!r}')
+    if pkg.get("license") != "UNLICENSED":
+        errors.append(f'package.json: "license" must be "UNLICENSED", got {pkg.get("license")!r}')
+    if not isinstance(pkg.get("name"), str) or not pkg.get("name", "").strip():
+        errors.append(f'package.json: "name" must be a non-empty string, got {pkg.get("name")!r}')
+    if not isinstance(pkg.get("version"), str) or not pkg.get("version", "").strip():
+        errors.append(f'package.json: "version" must be a non-empty string, got {pkg.get("version")!r}')
+    assert errors == [], (
+        "template/package.json identity contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14926,6 +14948,7 @@ def main() -> int:
         test_remotion_config_contract_lint,
         test_package_json_remotion_version_parity_lint,
         test_videoconfig_required_exports_present_lint,
+        test_package_json_identity_contract_lint,
     ]
     failed = []
     for t in tests:
