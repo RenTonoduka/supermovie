@@ -14548,6 +14548,32 @@ def test_vitest_setup_files_resolve_lint() -> None:
     )
 
 
+def test_eslint_config_no_explicit_any_contract_lint() -> None:
+    """PR-BV: template/eslint.config.mjs must enforce @typescript-eslint/no-explicit-any as "error".
+    Catches accidental removal or downgrade to "warn"/"off" of the any-free contract.
+    """
+    import re
+
+    template_root = Path(__file__).parents[1]
+    config_path = template_root / "eslint.config.mjs"
+    assert config_path.is_file(), "template/eslint.config.mjs not found"
+    text = config_path.read_text(encoding="utf-8")
+    assert "@typescript-eslint/no-explicit-any" in text, (
+        'template/eslint.config.mjs: "@typescript-eslint/no-explicit-any" rule not found'
+    )
+    match = re.search(
+        r'"@typescript-eslint/no-explicit-any"\s*:\s*"([^"]+)"',
+        text,
+    )
+    assert match, (
+        'template/eslint.config.mjs: could not parse @typescript-eslint/no-explicit-any value'
+    )
+    value = match.group(1)
+    assert value == "error", (
+        f'template/eslint.config.mjs: @typescript-eslint/no-explicit-any must be "error", got {value!r}'
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14827,6 +14853,7 @@ def main() -> int:
         # PR-BT (relative imports in template/src must resolve to existing files): 1 件
         test_template_src_relative_imports_resolve_lint,
         test_vitest_setup_files_resolve_lint,
+        test_eslint_config_no_explicit_any_contract_lint,
     ]
     failed = []
     for t in tests:
