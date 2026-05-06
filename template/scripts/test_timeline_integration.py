@@ -14622,6 +14622,27 @@ def test_package_json_remotion_version_parity_lint() -> None:
     )
 
 
+def test_videoconfig_required_exports_present_lint() -> None:
+    """PR-BY: template/src/videoConfig.ts must export FORMAT, FPS, RESOLUTION, TELOP_CONFIG, VIDEO_FILE.
+    Catches accidental removal of any SSoT constant that components depend on.
+    """
+    import re
+
+    template_root = Path(__file__).parents[1]
+    vc_path = template_root / "src" / "videoConfig.ts"
+    assert vc_path.is_file(), "template/src/videoConfig.ts not found"
+    text = vc_path.read_text(encoding="utf-8")
+    REQUIRED_EXPORTS = ["FORMAT", "FPS", "RESOLUTION", "TELOP_CONFIG", "VIDEO_FILE"]
+    errors: list[str] = []
+    for name in REQUIRED_EXPORTS:
+        # Match: export const NAME or export type NAME or export function NAME
+        if not re.search(rf"\bexport\b.+\b{re.escape(name)}\b", text):
+            errors.append(f"videoConfig.ts: missing export '{name}'")
+    assert errors == [], (
+        "template/src/videoConfig.ts missing required exports:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14904,6 +14925,7 @@ def main() -> int:
         test_eslint_config_no_explicit_any_contract_lint,
         test_remotion_config_contract_lint,
         test_package_json_remotion_version_parity_lint,
+        test_videoconfig_required_exports_present_lint,
     ]
     failed = []
     for t in tests:
