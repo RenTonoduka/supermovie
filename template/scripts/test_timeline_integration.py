@@ -14326,6 +14326,38 @@ def test_repo_root_tracked_paths_allowlist_lint() -> None:
     )
 
 
+def test_remotion_entrypoint_coherence_lint() -> None:
+    """PR-BO: Remotion render target in package.json must match <Composition id> in Root.tsx,
+    and index.ts must call registerRoot, catching entrypoint/id drift before runtime.
+    """
+    import re
+
+    repo_root = Path(__file__).parents[2]
+
+    # Extract render script target: "remotion render <ID> ..."
+    pkg_text = (repo_root / "template" / "package.json").read_text(encoding="utf-8")
+    render_match = re.search(r'"render"\s*:\s*"remotion\s+render\s+(\S+)', pkg_text)
+    assert render_match, "template/package.json: no 'remotion render <ID>' found in scripts.render"
+    render_target = render_match.group(1)
+
+    # Extract Composition id from Root.tsx
+    root_text = (repo_root / "template" / "src" / "Root.tsx").read_text(encoding="utf-8")
+    comp_match = re.search(r'<Composition[^>]+\bid\s*=\s*["\']([^"\']+)["\']', root_text)
+    assert comp_match, "template/src/Root.tsx: no <Composition id=...> found"
+    comp_id = comp_match.group(1)
+
+    assert render_target == comp_id, (
+        f"Render target mismatch: package.json scripts.render uses {render_target!r} "
+        f"but Root.tsx <Composition id> is {comp_id!r}"
+    )
+
+    # Verify index.ts calls registerRoot
+    index_text = (repo_root / "template" / "src" / "index.ts").read_text(encoding="utf-8")
+    assert re.search(r"\bregisterRoot\s*\(", index_text), (
+        "template/src/index.ts: registerRoot() call not found"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14592,6 +14624,8 @@ def main() -> int:
         test_shell_scripts_parse_with_bash_n_lint,
         # PR-BN (git-tracked top-level paths must belong to canonical root allowlist): 1 件
         test_repo_root_tracked_paths_allowlist_lint,
+        # PR-BO (Remotion render target in package.json must match Composition id in Root.tsx): 1 件
+        test_remotion_entrypoint_coherence_lint,
     ]
     failed = []
     for t in tests:
