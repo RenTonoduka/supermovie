@@ -14685,6 +14685,25 @@ def test_template_src_required_directories_lint() -> None:
     )
 
 
+def test_docs_required_files_present_lint() -> None:
+    """PR-CB: docs/ directory must contain OBSERVABILITY.md, PHASE3_PROGRESS.md, PHASE3_RELEASE_NOTE.md.
+    Catches accidental deletion of authoritative documentation files that agents and CI rely on.
+    """
+    repo_root = Path(__file__).parents[2]
+    docs_root = repo_root / "docs"
+    assert docs_root.is_dir(), "docs/ directory not found in repo root"
+    REQUIRED_FILES = [
+        "OBSERVABILITY.md",
+        "PHASE3_PROGRESS.md",
+        "PHASE3_RELEASE_NOTE.md",
+    ]
+    missing = [f for f in REQUIRED_FILES if not (docs_root / f).is_file()]
+    assert not missing, (
+        f"docs/ missing required files: {missing}\n"
+        f"(present: {sorted(p.name for p in docs_root.iterdir() if p.is_file())})"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14970,6 +14989,7 @@ def main() -> int:
         test_videoconfig_required_exports_present_lint,
         test_package_json_identity_contract_lint,
         test_template_src_required_directories_lint,
+        test_docs_required_files_present_lint,
     ]
     failed = []
     for t in tests:
