@@ -15594,6 +15594,27 @@ def test_title_segment_schema_and_title_data_typed_export_contract_lint() -> Non
     )
 
 
+def test_slide_data_exports_typed_empty_array_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    data_file = template_root / "src" / "Slides" / "slideData.ts"
+    assert data_file.is_file(), "template/src/Slides/slideData.ts not found"
+    raw = data_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    if not re.search(
+        r"""import\s+(?:type\s+)?\{[^}]*\bSlideSegment\b[^}]*\}\s*from\s*['"]\.\/types['"]""",
+        text,
+    ):
+        errors.append("slideData.ts: missing import of 'SlideSegment' from './types'")
+    if not re.search(r"export\s+const\s+slideData\s*:\s*SlideSegment\[\s*\]", text):
+        errors.append("slideData.ts: 'export const slideData: SlideSegment[]' not found — must be typed for supermovie-slides all-or-nothing rewrite safety")
+    assert errors == [], (
+        "template/src/Slides/slideData.ts typed export contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15917,6 +15938,7 @@ def main() -> int:
         test_telop_styles_animation_exports_motion_contract_lint,
         test_telop_styles_template_exports_and_config_helpers_lint,
         test_title_segment_schema_and_title_data_typed_export_contract_lint,
+        test_slide_data_exports_typed_empty_array_lint,
     ]
     failed = []
     for t in tests:
