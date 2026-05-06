@@ -14883,6 +14883,42 @@ def test_main_video_staticfile_uses_video_file_lint() -> None:
     )
 
 
+def test_main_video_required_layers_contract_lint() -> None:
+    """PR-CJ: MainVideo.tsx must import and render all 7 required composition layers.
+    Guards against editing/audio layers being silently removed from the composition surface.
+    Verified against template/src/MainVideo.tsx lines 2-8 (imports) and 41-59 (JSX).
+    """
+    import re
+
+    template_root = Path(__file__).parents[1]
+    main_video = template_root / "src" / "MainVideo.tsx"
+    assert main_video.is_file(), "template/src/MainVideo.tsx not found"
+    raw = main_video.read_text(encoding="utf-8")
+    text = "\n".join(
+        line for line in raw.splitlines()
+        if not line.lstrip().startswith("//")
+    )
+
+    REQUIRED_LAYERS = [
+        "SlideSequence",
+        "ImageSequence",
+        "TelopPlayer",
+        "TitleSequence",
+        "NarrationAudioWithMode",
+        "BGM",
+        "SESequence",
+    ]
+    errors: list[str] = []
+    for component in REQUIRED_LAYERS:
+        if not re.search(rf"\bimport\b.+\b{re.escape(component)}\b", text):
+            errors.append(f"MainVideo.tsx: missing import for layer '{component}'")
+        if not re.search(rf"<{re.escape(component)}[\s/>]", text):
+            errors.append(f"MainVideo.tsx: layer '{component}' not used in JSX")
+    assert errors == [], (
+        "template/src/MainVideo.tsx required layers contract drift:\n" + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15176,6 +15212,7 @@ def main() -> int:
         test_template_css_entrypoint_side_effects_lint,
         test_root_composition_uses_video_config_lint,
         test_main_video_staticfile_uses_video_file_lint,
+        test_main_video_required_layers_contract_lint,
     ]
     failed = []
     for t in tests:
