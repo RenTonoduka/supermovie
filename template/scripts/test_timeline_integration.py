@@ -15864,6 +15864,41 @@ def test_narration_audio_legacy_branch_wiring_contract_lint() -> None:
     )
 
 
+def test_bgm_asset_gate_and_audio_loop_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    bgm_file = template_root / "src" / "SoundEffects" / "BGM.tsx"
+    assert bgm_file.is_file(), "template/src/SoundEffects/BGM.tsx not found"
+    raw = bgm_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    remotion_import = re.search(r"""import\s*\{([^}]*)\}\s*from\s*['"]remotion['"]""", text)
+    if not remotion_import:
+        errors.append("BGM.tsx: no import from 'remotion' found")
+    else:
+        remotion_body = remotion_import.group(1)
+        for sym in ("Audio", "getStaticFiles", "staticFile"):
+            if not re.search(rf"\b{sym}\b", remotion_body):
+                errors.append(f"BGM.tsx: '{sym}' not imported from 'remotion'")
+    if not re.search(r"""\bconst\s+BGM_FILE\s*=\s*['"]BGM/bgm\.mp3['"]""", text):
+        errors.append("BGM.tsx: BGM_FILE constant must be 'BGM/bgm.mp3'")
+    if not re.search(r"getStaticFiles\s*\(\s*\)\.some\s*\([^;]*\.name\s*===\s*BGM_FILE", text):
+        errors.append("BGM.tsx: getStaticFiles().some((f) => f.name === BGM_FILE) guard not found")
+    if not re.search(r"if\s*\(\s*!\s*hasFile\s*\)\s*\{\s*return\s+null\s*;?\s*\}", text, re.DOTALL):
+        errors.append("BGM.tsx: 'if (!hasFile) return null' asset gate not found")
+    if not re.search(
+        r"""<Audio\b[^/]*src=\{\s*staticFile\s*\(\s*BGM_FILE\s*\)\s*\}[^/]*volume=\{\s*\(\)\s*=>\s*volume\s*\}[^/]*\bloop\b""",
+        text,
+        re.DOTALL,
+    ):
+        errors.append("BGM.tsx: <Audio src={staticFile(BGM_FILE)} volume={() => volume} loop ... /> not found")
+    assert errors == [], (
+        "template/src/SoundEffects/BGM.tsx asset gate / Audio loop contract drift:\n"
+        + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -16196,6 +16231,7 @@ def main() -> int:
         test_narration_audio_chunks_sequence_wiring_contract_lint,
         test_narration_mode_priority_dispatch_contract_lint,
         test_narration_audio_legacy_branch_wiring_contract_lint,
+        test_bgm_asset_gate_and_audio_loop_contract_lint,
     ]
     failed = []
     for t in tests:
