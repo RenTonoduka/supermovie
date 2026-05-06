@@ -14086,6 +14086,44 @@ def test_plugin_json_homepage_repository_canonical_url_lint() -> None:
     )
 
 
+def test_skill_frontmatter_field_order_lint() -> None:
+    """PR-BG: SKILL.md frontmatter fields must appear in canonical order:
+    name, description, argument-hint, allowed-tools, effort.
+    Complements key-set/no-duplicate lint without duplicating it.
+    """
+    import re
+
+    repo_root = Path(__file__).parents[2]
+    skills_root = repo_root / "skills"
+    CANONICAL_ORDER = ["name", "description", "argument-hint", "allowed-tools", "effort"]
+    FM_RE = re.compile(r"\A---\s*\n(.*?)^---\s*\n", re.MULTILINE | re.DOTALL)
+    KEY_RE = re.compile(r"^([A-Za-z][A-Za-z0-9-]*)[ \t]*:", re.MULTILINE)
+
+    errors: list[str] = []
+    for skill_path in sorted(skills_root.iterdir()):
+        if not skill_path.is_dir():
+            continue
+        skill_md = skill_path / "SKILL.md"
+        if not skill_md.is_file():
+            continue
+        content = skill_md.read_text(encoding="utf-8")
+        m = FM_RE.match(content)
+        if not m:
+            errors.append(f"{skill_path.name}/SKILL.md: no YAML frontmatter found")
+            continue
+        keys = KEY_RE.findall(m.group(1))
+        # filter to only canonical keys (ignore nested/continuation lines)
+        present = [k for k in keys if k in CANONICAL_ORDER]
+        expected = [k for k in CANONICAL_ORDER if k in present]
+        if present != expected:
+            errors.append(
+                f"{skill_path.name}/SKILL.md: frontmatter field order mismatch "
+                f"expected={expected}, got={present}"
+            )
+
+    assert errors == [], "SKILL.md frontmatter field order lint failed:\n" + "\n".join(errors)
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14336,6 +14374,8 @@ def main() -> int:
         test_markdown_heading_level_skip_lint,
         # PR-BF (plugin.json homepage == repository == canonical GitHub URL ending /{name}): 1 件
         test_plugin_json_homepage_repository_canonical_url_lint,
+        # PR-BG (SKILL.md frontmatter fields in canonical order: name/description/argument-hint/allowed-tools/effort): 1 件
+        test_skill_frontmatter_field_order_lint,
     ]
     failed = []
     for t in tests:
