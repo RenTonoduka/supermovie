@@ -15260,6 +15260,42 @@ def test_slide_uses_sequence_local_frame_without_startframe_offset() -> None:
     )
 
 
+def test_title_uses_sequence_local_frame_without_startframe_offset_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    title_file = template_root / "src" / "Title" / "Title.tsx"
+    assert title_file.is_file(), "template/src/Title/Title.tsx not found"
+    raw = title_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    if not re.search(r"\bconst\s+frame\s*=\s*useCurrentFrame\s*\(\s*\)", text):
+        errors.append("Title.tsx: 'const frame = useCurrentFrame()' not found")
+    if re.search(r"\bframe\s*-\s*segment\.startFrame\b", text):
+        errors.append(
+            "Title.tsx: 'frame - segment.startFrame' found — inside a Remotion Sequence "
+            "useCurrentFrame() already returns 0-based local frame"
+        )
+    if not re.search(r"\binterpolate\s*\(\s*frame\b", text):
+        errors.append(
+            "Title.tsx: interpolate(frame, ...) not found — opacity must use the Sequence-local frame directly"
+        )
+    if not re.search(r"\bspring\s*\(\s*\{[^}]*\bframe\s*,", text, re.DOTALL):
+        errors.append("Title.tsx: spring({ frame, ... }) not found — animation must use the Sequence-local frame")
+    if not re.search(r"\btitleData\.map\s*\(", text):
+        errors.append("Title.tsx: titleData.map() not found — TitleSequence must be data-driven")
+    if not re.search(r"\bfrom=\{segment\.startFrame\}", text):
+        errors.append("Title.tsx: from={segment.startFrame} not found on <Sequence>")
+    if not re.search(r"\bdurationInFrames=\{segment\.endFrame\s*-\s*segment\.startFrame\}", text):
+        errors.append("Title.tsx: durationInFrames={segment.endFrame - segment.startFrame} not found on <Sequence>")
+    if not re.search(r"<Title\s+segment=\{segment\}", text):
+        errors.append("Title.tsx: <Title segment={segment} .../> not found — must pass full segment to renderer")
+    assert errors == [], (
+        "template/src/Title/Title.tsx Sequence-local frame contract drift:\n"
+        + "\n".join(errors)
+    )
+
+
 def test_slide_segment_schema_contract_lint() -> None:
     import re
     template_root = Path(__file__).parents[1]
@@ -16210,6 +16246,7 @@ def main() -> int:
         # PR-CT (BGM.tsx uses BGM_FILE constant for both presence check and audio src lint): 1 件
         test_bgm_file_constant_is_single_source_for_presence_check_and_audio_src,
         test_slide_uses_sequence_local_frame_without_startframe_offset,
+        test_title_uses_sequence_local_frame_without_startframe_offset_lint,
         test_slide_segment_schema_contract_lint,
         test_narration_mode_invalidate_resets_cached_mode,
         test_template_narration_data_exports_typed_empty_array_lint,
