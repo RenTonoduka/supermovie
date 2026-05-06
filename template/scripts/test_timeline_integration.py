@@ -14254,6 +14254,33 @@ def test_shebang_scripts_are_executable_lint() -> None:
     )
 
 
+def test_shell_scripts_parse_with_bash_n_lint() -> None:
+    """PR-BM: Git-tracked .sh scripts must parse without errors under 'bash -n'.
+    Catches broken syntax in release/helper scripts before runtime.
+    Complements PR-BL (executable mode) with shell syntax validation.
+    """
+    import subprocess
+
+    repo_root = Path(__file__).parents[2]
+    result = subprocess.run(
+        ["git", "ls-files", "*.sh"],
+        capture_output=True, text=True, encoding="utf-8", errors="surrogateescape",
+        check=True, cwd=repo_root,
+    )
+    sh_files = result.stdout.splitlines()
+
+    errors: list[str] = []
+    for rel in sh_files:
+        chk = subprocess.run(
+            ["bash", "-n", rel],
+            capture_output=True, text=True, cwd=repo_root,
+        )
+        if chk.returncode != 0:
+            errors.append(f"{rel}: {chk.stderr.strip()}")
+
+    assert errors == [], "Shell script syntax lint (bash -n) failed:\n" + "\n".join(errors)
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14516,6 +14543,8 @@ def main() -> int:
         test_marketplace_json_name_derives_from_plugin_name_lint,
         # PR-BL (shebang scripts in git index must have mode 100755): 1 件
         test_shebang_scripts_are_executable_lint,
+        # PR-BM (tracked .sh scripts must parse without error under bash -n): 1 件
+        test_shell_scripts_parse_with_bash_n_lint,
     ]
     failed = []
     for t in tests:
