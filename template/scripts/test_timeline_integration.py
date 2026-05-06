@@ -14598,6 +14598,30 @@ def test_remotion_config_contract_lint() -> None:
     )
 
 
+def test_package_json_remotion_version_parity_lint() -> None:
+    """PR-BX: All remotion/@remotion/* packages in template/package.json must share the same version.
+    Catches partial upgrades where mixed versions cause hard-to-diagnose runtime errors.
+    """
+    import json
+    import re
+
+    template_root = Path(__file__).parents[1]
+    pkg = json.loads((template_root / "package.json").read_text(encoding="utf-8"))
+    all_deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
+    remotion_versions: dict[str, str] = {}
+    for name, spec in all_deps.items():
+        if name == "remotion" or name.startswith("@remotion/"):
+            # Strip semver prefixes (^, ~, =, >=) for comparison
+            normalized = re.sub(r"^[\^~=>]+", "", spec)
+            remotion_versions[name] = normalized
+    assert remotion_versions, "template/package.json: no remotion or @remotion/* packages found"
+    unique = set(remotion_versions.values())
+    assert len(unique) == 1, (
+        f"template/package.json: remotion package version mismatch — "
+        f"expected all packages to share one version, got: {remotion_versions}"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14879,6 +14903,7 @@ def main() -> int:
         test_vitest_setup_files_resolve_lint,
         test_eslint_config_no_explicit_any_contract_lint,
         test_remotion_config_contract_lint,
+        test_package_json_remotion_version_parity_lint,
     ]
     failed = []
     for t in tests:
