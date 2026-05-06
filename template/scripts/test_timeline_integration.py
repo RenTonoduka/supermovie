@@ -15564,6 +15564,36 @@ def test_telop_styles_template_exports_and_config_helpers_lint() -> None:
     )
 
 
+def test_title_segment_schema_and_title_data_typed_export_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    title_tsx = template_root / "src" / "Title" / "Title.tsx"
+    assert title_tsx.is_file(), "template/src/Title/Title.tsx not found"
+    raw_tsx = title_tsx.read_text(encoding="utf-8")
+    tsx = "\n".join(line for line in raw_tsx.splitlines() if not line.lstrip().startswith("//"))
+    tsx = re.sub(r"/\*.*?\*/", "", tsx, flags=re.DOTALL)
+    title_data_file = template_root / "src" / "Title" / "titleData.ts"
+    assert title_data_file.is_file(), "template/src/Title/titleData.ts not found"
+    raw_data = title_data_file.read_text(encoding="utf-8")
+    dat = "\n".join(line for line in raw_data.splitlines() if not line.lstrip().startswith("//"))
+    dat = re.sub(r"/\*.*?\*/", "", dat, flags=re.DOTALL)
+    errors: list[str] = []
+    for field, typ in (("id", "number"), ("startFrame", "number"), ("endFrame", "number"), ("text", "string")):
+        if not re.search(rf"\b{field}\s*:\s*{typ}\b", tsx):
+            errors.append(f"Title.tsx TitleSegment: required field '{field}: {typ}' not found")
+    if not re.search(
+        r"""import\s+(?:type\s+)?\{[^}]*\bTitleSegment\b[^}]*\}\s*from\s*['"]\.\/Title['"]""",
+        dat,
+    ):
+        errors.append("titleData.ts: TitleSegment not imported from './Title'")
+    if not re.search(r"export\s+const\s+titleData\s*:\s*TitleSegment\[\s*\]", dat):
+        errors.append("titleData.ts: 'export const titleData: TitleSegment[]' not found — must be typed for supermovie-subtitles rewrite safety")
+    assert errors == [], (
+        "template/src/Title TitleSegment schema / titleData typed export contract drift:\n"
+        + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15886,6 +15916,7 @@ def main() -> int:
         test_sound_effect_schema_and_se_data_export_lint,
         test_telop_styles_animation_exports_motion_contract_lint,
         test_telop_styles_template_exports_and_config_helpers_lint,
+        test_title_segment_schema_and_title_data_typed_export_contract_lint,
     ]
     failed = []
     for t in tests:
