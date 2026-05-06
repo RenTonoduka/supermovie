@@ -15648,6 +15648,31 @@ def test_insert_image_data_typed_export_and_toframe_fps_contract_lint() -> None:
     )
 
 
+def test_slide_sequence_wraps_slide_segments_in_sequence_frame_ranges_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    seq_file = template_root / "src" / "Slides" / "SlideSequence.tsx"
+    assert seq_file.is_file(), "template/src/Slides/SlideSequence.tsx not found"
+    raw = seq_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    if not re.search(r"\bslideData\.map\s*\(", text):
+        errors.append("SlideSequence.tsx: slideData.map() not found — must be data-driven")
+    if not re.search(r"\bkey=\{segment\.id\}", text):
+        errors.append("SlideSequence.tsx: key={segment.id} not found on <Sequence>")
+    if not re.search(r"\bfrom=\{segment\.startFrame\}", text):
+        errors.append("SlideSequence.tsx: from={segment.startFrame} not found on <Sequence>")
+    if not re.search(r"\bdurationInFrames=\{segment\.endFrame\s*-\s*segment\.startFrame\}", text):
+        errors.append("SlideSequence.tsx: durationInFrames={segment.endFrame - segment.startFrame} not found — Sequence must span exact segment range")
+    if not re.search(r"<Slide\s+segment=\{segment\}", text):
+        errors.append("SlideSequence.tsx: <Slide segment={segment} .../> not found — must pass full segment to renderer")
+    assert errors == [], (
+        "template/src/Slides/SlideSequence.tsx Sequence frame range contract drift:\n"
+        + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -15973,6 +15998,7 @@ def main() -> int:
         test_title_segment_schema_and_title_data_typed_export_contract_lint,
         test_slide_data_exports_typed_empty_array_lint,
         test_insert_image_data_typed_export_and_toframe_fps_contract_lint,
+        test_slide_sequence_wraps_slide_segments_in_sequence_frame_ranges_lint,
     ]
     failed = []
     for t in tests:
