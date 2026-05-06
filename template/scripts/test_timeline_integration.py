@@ -14425,6 +14425,39 @@ def test_package_json_test_timeline_script_path_resolves_lint() -> None:
     )
 
 
+def test_gitignore_required_entries_lint() -> None:
+    """PR-BR: .gitignore must contain all required entries for dependency dirs, secrets, and artifacts.
+    Prevents accidental commits of node_modules, .venv, secrets, or render output.
+    """
+    repo_root = Path(__file__).parents[2]
+    gitignore_path = repo_root / ".gitignore"
+    assert gitignore_path.is_file(), ".gitignore not found in repo root"
+
+    text = gitignore_path.read_text(encoding="utf-8")
+    # Strip comments and blank lines; collect active entries
+    entries = {
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    }
+
+    REQUIRED_ENTRIES = {
+        "node_modules/",
+        ".venv/",
+        "__pycache__/",
+        "*.pyc",
+        "out/",
+        ".env",
+        ".DS_Store",
+    }
+
+    missing = sorted(REQUIRED_ENTRIES - entries)
+    assert not missing, (
+        f".gitignore missing required entries: {missing}\n"
+        f"(present: {sorted(entries)})"
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -14697,6 +14730,8 @@ def main() -> int:
         test_video_config_format_map_parity_lint,
         # PR-BQ (package.json test:timeline must use python3 and point to existing file): 1 件
         test_package_json_test_timeline_script_path_resolves_lint,
+        # PR-BR (.gitignore must contain required entries for deps/secrets/artifacts): 1 件
+        test_gitignore_required_entries_lint,
     ]
     failed = []
     for t in tests:
