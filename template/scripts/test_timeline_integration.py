@@ -15698,6 +15698,38 @@ def test_image_sequence_wraps_image_segments_in_sequence_frame_ranges_lint() -> 
     )
 
 
+def test_telop_data_typed_export_and_video_config_ssot_contract_lint() -> None:
+    import re
+    template_root = Path(__file__).parents[1]
+    data_file = template_root / "src" / "テロップテンプレート" / "telopData.ts"
+    assert data_file.is_file(), "template/src/テロップテンプレート/telopData.ts not found"
+    raw = data_file.read_text(encoding="utf-8")
+    text = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    errors: list[str] = []
+    if not re.search(r"""import\s+type\s*\{[^}]*\bTelopSegment\b[^}]*\}\s*from\s*['"]\.\/telopTypes['"]""", text):
+        errors.append("telopData.ts: 'TelopSegment' not imported as type from './telopTypes'")
+    vc_import = re.search(r"""import\s*\{([^}]*)\}\s*from\s*['"]\.\.\/videoConfig['"]""", text)
+    if not vc_import:
+        errors.append("telopData.ts: no import from '../videoConfig' found")
+    else:
+        vc_body = vc_import.group(1)
+        if not re.search(r"\bFPS\s+as\s+CONFIG_FPS\b", vc_body):
+            errors.append("telopData.ts: 'FPS as CONFIG_FPS' not found in '../videoConfig' import")
+        if not re.search(r"\bSOURCE_DURATION_FRAMES\b", vc_body):
+            errors.append("telopData.ts: 'SOURCE_DURATION_FRAMES' not found in '../videoConfig' import")
+    if not re.search(r"\bexport\s+const\s+FPS\s*=\s*CONFIG_FPS\b", text):
+        errors.append("telopData.ts: 'export const FPS = CONFIG_FPS' not found — FPS must re-export from videoConfig SSoT")
+    if not re.search(r"\bexport\s+const\s+TOTAL_FRAMES\s*=\s*SOURCE_DURATION_FRAMES\b", text):
+        errors.append("telopData.ts: 'export const TOTAL_FRAMES = SOURCE_DURATION_FRAMES' not found — TOTAL_FRAMES must re-export from videoConfig SSoT")
+    if not re.search(r"export\s+const\s+telopData\s*:\s*TelopSegment\[\s*\]", text):
+        errors.append("telopData.ts: 'export const telopData: TelopSegment[]' not found — must be typed for supermovie-subtitles all-or-nothing rewrite safety")
+    assert errors == [], (
+        "template/src/テロップテンプレート/telopData.ts typed export / videoConfig SSoT contract drift:\n"
+        + "\n".join(errors)
+    )
+
+
 def main() -> int:
     tests = [
         test_fps_consistency,
@@ -16025,6 +16057,7 @@ def main() -> int:
         test_insert_image_data_typed_export_and_toframe_fps_contract_lint,
         test_slide_sequence_wraps_slide_segments_in_sequence_frame_ranges_lint,
         test_image_sequence_wraps_image_segments_in_sequence_frame_ranges_lint,
+        test_telop_data_typed_export_and_video_config_ssot_contract_lint,
     ]
     failed = []
     for t in tests:
